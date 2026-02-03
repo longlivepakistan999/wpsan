@@ -2,15 +2,16 @@
 
 ## 项目概述
 
-WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全扫描工具，采用无入侵方式进行安全检测。
+WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全扫描工具，采用无入侵方式进行安全检测，支持**几十万级**资产批量扫描。
 
 ### 设计原则
 
 1. **无入侵检测** - 所有探测均基于被动信息收集，不对目标系统造成任何破坏
 2. **渐进式扫描** - 按顺序逐步深入：识别CMS → 检测CDN → 版本探测 → 解析资产 → 漏洞匹配
-3. **POC 可扩展** - 插件式 POC 架构，支持动态加载和热更新
-4. **分布式架构** - 支持多节点部署，任务调度和负载均衡
-5. **商业友好** - 模块化设计，支持许可证管理和定价策略
+3. **大规模支持** - 支持 50万+ 资产导入，高效队列处理
+4. **POC 可扩展** - 插件式 POC 架构，支持动态加载和热更新
+5. **分布式架构** - 支持多节点部署，任务调度和负载均衡
+6. **商业友好** - 模块化设计，支持许可证管理和定价策略
 
 ---
 
@@ -96,6 +97,15 @@ wpsan/
 │   │   ├── http-client.ts       # HTTP 客户端封装
 │   │   └── rate-limiter.ts      # 请求限速器
 │   │
+│   ├── targets/                 # 目标资产管理（支持50万+）
+│   │   ├── manager.ts           # 资产管理器
+│   │   ├── importer.ts          # 批量导入器
+│   │   ├── parsers/             # 文件解析器
+│   │   │   ├── txt-parser.ts    # TXT 解析 (一行一个URL)
+│   │   │   └── csv-parser.ts    # CSV 解析 (支持多列)
+│   │   ├── validator.ts         # URL 验证/去重
+│   │   └── group.ts             # 资产分组
+│   │
 │   ├── detectors/               # 检测模块（按扫描顺序）
 │   │   ├── 01-wordpress/        # Step 1: WordPress 识别
 │   │   │   ├── detector.ts      # 主检测器
@@ -145,13 +155,16 @@ wpsan/
 │   ├── distributed/             # 分布式模块
 │   │   ├── master.ts            # 主节点（任务调度）
 │   │   ├── worker.ts            # 工作节点（执行扫描）
-│   │   ├── queue.ts             # 任务队列
+│   │   ├── queue.ts             # 任务队列（高吞吐）
+│   │   ├── batch-scheduler.ts   # 批量任务调度器
 │   │   ├── coordinator.ts       # 协调器
 │   │   └── protocol.ts          # 通信协议
 │   │
 │   ├── api/                     # API 服务
 │   │   ├── server.ts            # HTTP 服务器
 │   │   ├── routes/
+│   │   │   ├── targets.ts       # 资产管理 API
+│   │   │   ├── import.ts        # 批量导入 API
 │   │   │   ├── scan.ts          # 扫描相关 API
 │   │   │   ├── poc.ts           # POC 相关 API
 │   │   │   └── vulndb.ts        # 漏洞库 API
@@ -165,6 +178,7 @@ wpsan/
 │       ├── logger.ts
 │       ├── cache.ts
 │       ├── ip-utils.ts          # IP 地址工具
+│       ├── stream-utils.ts      # 流式处理工具
 │       └── config.ts
 │
 ├── data/
@@ -172,6 +186,9 @@ wpsan/
 │   │   ├── ips-v4.txt           # IPv4 段 (定期从 CF 更新)
 │   │   └── ips-v6.txt           # IPv6 段
 │   └── vulndb/                  # 漏洞数据库
+│
+├── uploads/                     # 上传文件临时目录
+│   └── imports/                 # 导入文件
 │
 ├── poc-modules/                 # 外部 POC 模块（可扩展）
 │   └── custom/                  # 用户自定义 POC
@@ -207,6 +224,531 @@ wpsan/
 - **框架**: Vue 3 或 React
 - **状态管理**: Pinia 或 Zustand
 - **UI 组件**: Element Plus 或 Ant Design
+
+---
+
+## 资产管理（支持 50万+ 目标）
+
+### 数据模型
+
+```typescript
+// 目标资产
+interface ITarget {
+  id: string;
+  url: string;                    // 目标 URL
+  domain: string;                 // 域名（自动提取）
+  groupId?: string;               // 分组 ID
+  tags?: string[];                // 标签
+  status: 'pending' | 'scanning' | 'completed' | 'failed';
+
+  // 最近扫描结果摘要
+  lastScan?: {
+    scanId: string;
+    isWordPress: boolean;
+    wpVersion?: string;
+    cloudflare: boolean;
+    vulnCount: number;
+    scannedAt: Date;
+  };
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 资产分组
+interface ITargetGroup {
+  id: string;
+  name: string;
+  description?: string;
+  targetCount: number;            // 资产数量
+  createdAt: Date;
+}
+
+// 导入任务
+interface IImportJob {
+  id: string;
+  filename: string;
+  fileType: 'txt' | 'csv';
+  fileSize: number;
+
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+
+  // 进度
+  progress: {
+    total: number;                // 总行数
+    processed: number;            // 已处理
+    valid: number;                // 有效 URL
+    duplicates: number;           // 重复
+    invalid: number;              // 无效
+  };
+
+  groupId?: string;               // 导入到的分组
+  error?: string;
+
+  createdAt: Date;
+  completedAt?: Date;
+}
+```
+
+### 批量导入设计
+
+#### 支持的文件格式
+
+**TXT 格式** - 一行一个 URL：
+```
+https://example1.com
+https://example2.com
+http://example3.com/blog
+```
+
+**CSV 格式** - 支持多列，自动识别 URL 列：
+```csv
+url,name,tags
+https://example1.com,站点1,"tag1,tag2"
+https://example2.com,站点2,"tag3"
+```
+
+或简单格式：
+```csv
+https://example1.com
+https://example2.com
+```
+
+#### 导入流程
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           批量导入流程                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+     ┌──────────────┐
+     │  上传文件     │  TXT / CSV (支持 500MB+)
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  创建导入任务 │  返回 jobId，异步处理
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  流式解析     │  逐行读取，低内存占用
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  URL 验证     │  格式校验、规范化
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  批量去重     │  数据库级别去重
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  批量写入     │  每 1000 条批量 INSERT
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │  实时进度     │  WebSocket 推送
+     └──────────────┘
+```
+
+#### 核心代码
+
+```typescript
+// src/targets/importer.ts
+
+import { createReadStream } from 'fs';
+import { createInterface } from 'readline';
+import { parse as csvParse } from 'csv-parse';
+
+class TargetImporter {
+  private batchSize = 1000;        // 批量写入大小
+  private progressInterval = 100;  // 进度上报间隔
+
+  // 导入 TXT 文件
+  async importTxt(
+    filePath: string,
+    jobId: string,
+    groupId?: string
+  ): Promise<void> {
+    const stream = createReadStream(filePath, { encoding: 'utf-8' });
+    const rl = createInterface({ input: stream });
+
+    let batch: string[] = [];
+    let processed = 0;
+    let valid = 0;
+    let duplicates = 0;
+    let invalid = 0;
+
+    for await (const line of rl) {
+      processed++;
+      const url = this.normalizeUrl(line.trim());
+
+      if (!url) {
+        invalid++;
+        continue;
+      }
+
+      batch.push(url);
+
+      // 批量写入
+      if (batch.length >= this.batchSize) {
+        const result = await this.batchInsert(batch, groupId);
+        valid += result.inserted;
+        duplicates += result.duplicates;
+        batch = [];
+
+        // 上报进度
+        if (processed % this.progressInterval === 0) {
+          await this.reportProgress(jobId, { processed, valid, duplicates, invalid });
+        }
+      }
+    }
+
+    // 处理剩余
+    if (batch.length > 0) {
+      const result = await this.batchInsert(batch, groupId);
+      valid += result.inserted;
+      duplicates += result.duplicates;
+    }
+
+    await this.completeJob(jobId, { processed, valid, duplicates, invalid });
+  }
+
+  // 导入 CSV 文件
+  async importCsv(
+    filePath: string,
+    jobId: string,
+    groupId?: string
+  ): Promise<void> {
+    const stream = createReadStream(filePath);
+    const parser = csvParse({
+      columns: true,              // 第一行作为列名
+      skip_empty_lines: true,
+      relaxColumnCount: true,
+    });
+
+    let batch: { url: string; name?: string; tags?: string[] }[] = [];
+    let processed = 0;
+
+    stream.pipe(parser);
+
+    for await (const row of parser) {
+      processed++;
+
+      // 自动检测 URL 列
+      const url = this.extractUrlFromRow(row);
+      if (!url) continue;
+
+      batch.push({
+        url: this.normalizeUrl(url),
+        name: row.name || row.title || row.域名,
+        tags: this.parseTags(row.tags || row.标签),
+      });
+
+      if (batch.length >= this.batchSize) {
+        await this.batchInsertWithMeta(batch, groupId);
+        batch = [];
+        await this.reportProgress(jobId, { processed });
+      }
+    }
+
+    if (batch.length > 0) {
+      await this.batchInsertWithMeta(batch, groupId);
+    }
+  }
+
+  // URL 规范化
+  private normalizeUrl(url: string): string | null {
+    if (!url) return null;
+
+    // 自动补充协议
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+
+    try {
+      const parsed = new URL(url);
+      // 返回规范化的 URL（去除末尾斜杠等）
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.replace(/\/$/, '');
+    } catch {
+      return null;
+    }
+  }
+
+  // 批量插入（带去重）
+  private async batchInsert(
+    urls: string[],
+    groupId?: string
+  ): Promise<{ inserted: number; duplicates: number }> {
+    // 使用 ON CONFLICT 实现数据库级别去重
+    const result = await db.query(`
+      INSERT INTO targets (id, url, domain, group_id, status, created_at)
+      SELECT
+        gen_random_uuid(),
+        unnest($1::text[]),
+        unnest($2::text[]),
+        $3,
+        'pending',
+        NOW()
+      ON CONFLICT (url) DO NOTHING
+      RETURNING id
+    `, [urls, urls.map(u => new URL(u).host), groupId]);
+
+    return {
+      inserted: result.rowCount,
+      duplicates: urls.length - result.rowCount,
+    };
+  }
+
+  // 从 CSV 行中提取 URL
+  private extractUrlFromRow(row: Record<string, string>): string | null {
+    // 尝试常见列名
+    const urlColumns = ['url', 'URL', 'domain', 'site', 'website', '网址', '域名'];
+    for (const col of urlColumns) {
+      if (row[col]) return row[col];
+    }
+    // 如果只有一列，使用第一列
+    const keys = Object.keys(row);
+    if (keys.length === 1) return row[keys[0]];
+    return null;
+  }
+}
+```
+
+### API 设计
+
+```typescript
+// 资产管理 API
+POST   /api/v1/targets/import           // 上传并导入文件
+GET    /api/v1/targets/import/:jobId    // 获取导入进度
+GET    /api/v1/targets                  // 获取资产列表（分页）
+GET    /api/v1/targets/:id              // 获取单个资产详情
+DELETE /api/v1/targets/:id              // 删除资产
+DELETE /api/v1/targets/batch            // 批量删除
+
+// 分组管理
+POST   /api/v1/targets/groups           // 创建分组
+GET    /api/v1/targets/groups           // 获取分组列表
+PUT    /api/v1/targets/groups/:id       // 更新分组
+DELETE /api/v1/targets/groups/:id       // 删除分组
+
+// 批量扫描
+POST   /api/v1/targets/scan             // 扫描选中的资产
+POST   /api/v1/targets/groups/:id/scan  // 扫描整个分组
+```
+
+### 导入 API 示例
+
+```typescript
+// POST /api/v1/targets/import
+// Content-Type: multipart/form-data
+
+// Request:
+// - file: 上传的文件 (TXT/CSV)
+// - groupId: 可选，导入到指定分组
+
+// Response:
+{
+  "jobId": "import_abc123",
+  "status": "processing",
+  "filename": "targets.csv",
+  "fileSize": 52428800  // 50MB
+}
+
+// 通过 WebSocket 获取实时进度
+ws.subscribe('import:import_abc123');
+
+// 进度事件
+{
+  "event": "import:progress",
+  "data": {
+    "jobId": "import_abc123",
+    "progress": {
+      "total": 500000,
+      "processed": 125000,
+      "valid": 124500,
+      "duplicates": 300,
+      "invalid": 200,
+      "percent": 25
+    }
+  }
+}
+
+// 完成事件
+{
+  "event": "import:complete",
+  "data": {
+    "jobId": "import_abc123",
+    "summary": {
+      "total": 500000,
+      "imported": 498000,
+      "duplicates": 1500,
+      "invalid": 500,
+      "duration": 120  // 秒
+    }
+  }
+}
+```
+
+### PostgreSQL Schema（大规模优化）
+
+```sql
+-- 目标资产表（优化大规模数据）
+CREATE TABLE targets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  url VARCHAR(2048) NOT NULL,
+  domain VARCHAR(255) NOT NULL,
+  group_id UUID REFERENCES target_groups(id) ON DELETE SET NULL,
+  tags TEXT[],
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+
+  -- 最近扫描摘要（避免 JOIN）
+  last_scan_id UUID,
+  last_scan_at TIMESTAMP,
+  is_wordpress BOOLEAN,
+  wp_version VARCHAR(20),
+  cloudflare BOOLEAN,
+  vuln_count INTEGER DEFAULT 0,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  -- 唯一约束用于去重
+  CONSTRAINT targets_url_unique UNIQUE (url)
+);
+
+-- 索引优化
+CREATE INDEX idx_targets_domain ON targets (domain);
+CREATE INDEX idx_targets_group ON targets (group_id);
+CREATE INDEX idx_targets_status ON targets (status);
+CREATE INDEX idx_targets_created ON targets (created_at DESC);
+CREATE INDEX idx_targets_is_wp ON targets (is_wordpress) WHERE is_wordpress = true;
+CREATE INDEX idx_targets_vuln ON targets (vuln_count DESC) WHERE vuln_count > 0;
+
+-- 分区表（按创建时间，可选）
+-- CREATE TABLE targets_2024 PARTITION OF targets
+--   FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+
+-- 分组表
+CREATE TABLE target_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  target_count INTEGER DEFAULT 0,  -- 缓存计数
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 导入任务表
+CREATE TABLE import_jobs (
+  id VARCHAR(50) PRIMARY KEY,
+  filename VARCHAR(255) NOT NULL,
+  file_type VARCHAR(10) NOT NULL,
+  file_size BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+
+  -- 进度
+  total_rows INTEGER DEFAULT 0,
+  processed_rows INTEGER DEFAULT 0,
+  valid_count INTEGER DEFAULT 0,
+  duplicate_count INTEGER DEFAULT 0,
+  invalid_count INTEGER DEFAULT 0,
+
+  group_id UUID REFERENCES target_groups(id),
+  error TEXT,
+
+  created_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP
+);
+```
+
+### 性能优化策略
+
+```typescript
+// 50万资产处理策略
+
+const PERFORMANCE_CONFIG = {
+  // 导入优化
+  import: {
+    batchSize: 1000,              // 每批插入 1000 条
+    streamChunkSize: 64 * 1024,   // 64KB 流式读取
+    maxConcurrentInserts: 4,      // 并发写入数
+  },
+
+  // 扫描优化
+  scan: {
+    batchSize: 10000,             // 每次从 DB 取 10000 个目标
+    queueBatchSize: 100,          // 每次入队 100 个任务
+    maxConcurrentScans: 1000,     // 最大并发扫描数
+  },
+
+  // 查询优化
+  query: {
+    defaultPageSize: 50,          // 默认分页大小
+    maxPageSize: 1000,            // 最大分页大小
+    useCountEstimate: true,       // 大表使用估算计数
+  },
+};
+
+// 大表计数优化（避免 COUNT(*)）
+async function getEstimatedCount(table: string): Promise<number> {
+  const result = await db.query(`
+    SELECT reltuples::bigint AS estimate
+    FROM pg_class
+    WHERE relname = $1
+  `, [table]);
+  return result.rows[0]?.estimate || 0;
+}
+
+// 游标分页（大数据集）
+async function* iterateTargets(
+  groupId?: string,
+  batchSize = 10000
+): AsyncGenerator<ITarget[]> {
+  let cursor: string | null = null;
+
+  while (true) {
+    const result = await db.query(`
+      SELECT * FROM targets
+      WHERE ($1::uuid IS NULL OR group_id = $1)
+        AND ($2::uuid IS NULL OR id > $2)
+      ORDER BY id
+      LIMIT $3
+    `, [groupId, cursor, batchSize]);
+
+    if (result.rows.length === 0) break;
+
+    yield result.rows;
+    cursor = result.rows[result.rows.length - 1].id;
+  }
+}
+```
+
+### CLI 命令
+
+```bash
+# 导入资产
+wpsan import targets.txt                    # 导入 TXT
+wpsan import targets.csv --group=group1    # 导入到指定分组
+wpsan import targets.csv --tags=prod,cn    # 添加标签
+
+# 资产管理
+wpsan targets list                          # 列出资产
+wpsan targets list --group=group1           # 按分组筛选
+wpsan targets list --wp-only                # 只显示 WordPress 站点
+wpsan targets count                         # 资产总数
+wpsan targets export --format=csv           # 导出资产
+
+# 批量扫描
+wpsan scan --all                            # 扫描所有资产
+wpsan scan --group=group1                   # 扫描指定分组
+wpsan scan --limit=10000                    # 限制扫描数量
+wpsan scan --status=pending                 # 只扫描待扫描的
+```
 
 ---
 
