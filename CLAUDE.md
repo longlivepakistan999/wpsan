@@ -2,14 +2,92 @@
 
 ## 项目概述
 
-WPSan (WordPress Security Analyzer) 是一个商业级 WordPress 安全扫描工具，采用无入侵方式进行安全检测。
+WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全扫描工具，采用无入侵方式进行安全检测。
 
 ### 设计原则
 
 1. **无入侵检测** - 所有探测均基于被动信息收集，不对目标系统造成任何破坏
-2. **合法合规** - 仅提供安全评估功能，POC 仅验证无条件可利用漏洞
-3. **准确可靠** - 减少误报，提供可验证的检测结果
-4. **商业友好** - 模块化设计，支持许可证管理和定价策略
+2. **渐进式扫描** - 按顺序逐步深入：识别CMS → 检测WAF → 版本探测 → 资产枚举 → 漏洞匹配
+3. **POC 可扩展** - 插件式 POC 架构，支持动态加载和热更新
+4. **分布式架构** - 支持多节点部署，任务调度和负载均衡
+5. **商业友好** - 模块化设计，支持许可证管理和定价策略
+
+---
+
+## 扫描流程设计
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            WPSan 扫描流程                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+     ┌──────────────┐
+     │   输入 URL    │
+     └──────┬───────┘
+            ▼
+     ┌──────────────┐      否
+     │ 是否是 WP？   │─────────────────────────────┐
+     └──────┬───────┘                             │
+            │ 是                                   ▼
+            ▼                              ┌──────────────┐
+     ┌──────────────┐                      │  非WP站点    │
+     │ 检测 CF/WAF  │                      │  结束扫描    │
+     └──────┬───────┘                      └──────────────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 检测WP版本    │
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 枚举所有插件  │
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 枚举所有主题  │
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 检测插件版本  │
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 检测主题版本  │
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 匹配漏洞库    │──────────► 显示关联的 POC 列表
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 用户点击 POC  │──────────► 执行 POC 验证
+     └──────┬───────┘
+            │
+            ▼
+     ┌──────────────┐
+     │ 返回验证结果  │
+     └──────────────┘
+```
+
+### 扫描阶段详解
+
+| 阶段 | 名称 | 描述 | 输出 |
+|------|------|------|------|
+| 1 | WordPress 识别 | 判断目标是否为 WordPress | `isWordPress: boolean` |
+| 2 | WAF/CDN 检测 | 检测 Cloudflare、Sucuri 等 | `waf: { type, detected }` |
+| 3 | 版本检测 | 检测 WordPress 核心版本 | `version: string` |
+| 4 | 插件枚举 | 发现所有已安装插件 | `plugins: [{ slug, name }]` |
+| 5 | 主题枚举 | 发现所有已安装主题 | `themes: [{ slug, name }]` |
+| 6 | 插件版本检测 | 检测每个插件的版本 | `plugins: [{ slug, version }]` |
+| 7 | 主题版本检测 | 检测每个主题的版本 | `themes: [{ slug, version }]` |
+| 8 | 漏洞匹配 | 根据版本匹配漏洞库 | `vulnerabilities: [{ cve, poc }]` |
+| 9 | POC 验证 | 用户触发，验证漏洞 | `{ vulnerable, evidence }` |
 
 ---
 
@@ -19,85 +97,107 @@ WPSan (WordPress Security Analyzer) 是一个商业级 WordPress 安全扫描工
 wpsan/
 ├── src/
 │   ├── core/                    # 核心引擎
-│   │   ├── scanner.ts           # 扫描器主类
-│   │   ├── fingerprint.ts       # 指纹识别引擎
+│   │   ├── scanner.ts           # 扫描器主类（流程编排）
+│   │   ├── pipeline.ts          # 扫描管道（阶段控制）
 │   │   ├── http-client.ts       # HTTP 客户端封装
 │   │   └── rate-limiter.ts      # 请求限速器
 │   │
-│   ├── detectors/               # 检测模块
-│   │   ├── wordpress/           # WordPress 核心检测
-│   │   │   ├── version.ts       # 版本检测
-│   │   │   ├── config.ts        # 配置检测
-│   │   │   └── users.ts         # 用户枚举
-│   │   ├── plugins/             # 插件检测
-│   │   │   ├── enumerator.ts    # 插件枚举
-│   │   │   └── fingerprints/    # 插件指纹库
-│   │   ├── themes/              # 主题检测
-│   │   │   ├── enumerator.ts    # 主题枚举
-│   │   │   └── fingerprints/    # 主题指纹库
-│   │   └── security/            # 安全配置检测
-│   │       ├── headers.ts       # HTTP 头检测
-│   │       ├── waf.ts           # WAF 检测
-│   │       └── exposures.ts     # 敏感文件暴露
+│   ├── detectors/               # 检测模块（按扫描顺序）
+│   │   ├── 01-wordpress/        # Step 1: WordPress 识别
+│   │   │   ├── detector.ts      # 主检测器
+│   │   │   └── signatures.ts    # WP 特征签名
+│   │   │
+│   │   ├── 02-waf/              # Step 2: WAF/CDN 检测
+│   │   │   ├── detector.ts
+│   │   │   ├── cloudflare.ts    # Cloudflare 检测
+│   │   │   ├── sucuri.ts        # Sucuri 检测
+│   │   │   ├── wordfence.ts     # Wordfence 检测
+│   │   │   └── generic.ts       # 通用 WAF 检测
+│   │   │
+│   │   ├── 03-version/          # Step 3: WordPress 版本
+│   │   │   ├── detector.ts
+│   │   │   └── methods/         # 各种版本检测方法
+│   │   │
+│   │   ├── 04-plugins/          # Step 4: 插件枚举
+│   │   │   ├── enumerator.ts    # 插件枚举器
+│   │   │   ├── passive.ts       # 被动枚举（源码分析）
+│   │   │   ├── aggressive.ts    # 主动枚举（路径探测）
+│   │   │   └── wordlist.ts      # 字典管理
+│   │   │
+│   │   ├── 05-themes/           # Step 5: 主题枚举
+│   │   │   ├── enumerator.ts
+│   │   │   ├── passive.ts
+│   │   │   └── aggressive.ts
+│   │   │
+│   │   ├── 06-plugin-version/   # Step 6: 插件版本检测
+│   │   │   ├── detector.ts
+│   │   │   └── extractors/      # 版本提取器
+│   │   │
+│   │   └── 07-theme-version/    # Step 7: 主题版本检测
+│   │       ├── detector.ts
+│   │       └── extractors/
 │   │
 │   ├── vulndb/                  # 漏洞数据库
 │   │   ├── database.ts          # 数据库接口
+│   │   ├── matcher.ts           # 漏洞匹配引擎
 │   │   ├── models/              # 数据模型
-│   │   ├── sources/             # 漏洞源同步
-│   │   └── data/                # 漏洞数据文件
+│   │   └── sync/                # 数据同步
 │   │
-│   ├── poc/                     # POC 验证模块
+│   ├── poc/                     # POC 模块（可扩展）
+│   │   ├── loader.ts            # POC 加载器（支持热加载）
 │   │   ├── runner.ts            # POC 执行器
-│   │   ├── validators/          # 验证器
-│   │   └── modules/             # POC 模块
-│   │       ├── info-disclosure/ # 信息泄露
-│   │       ├── unauth-access/   # 未授权访问
-│   │       └── xmlrpc/          # XMLRPC 相关
+│   │   ├── registry.ts          # POC 注册表
+│   │   ├── base.ts              # POC 基类
+│   │   └── modules/             # POC 模块目录
+│   │       ├── wordpress/       # WP 核心漏洞 POC
+│   │       ├── plugins/         # 插件漏洞 POC
+│   │       │   ├── elementor/
+│   │       │   ├── woocommerce/
+│   │       │   ├── contact-form-7/
+│   │       │   └── ...
+│   │       └── themes/          # 主题漏洞 POC
 │   │
-│   ├── reporter/                # 报告生成
-│   │   ├── generator.ts         # 报告生成器
-│   │   ├── templates/           # 报告模板
-│   │   └── formatters/          # 格式化器 (PDF/HTML/JSON)
+│   ├── distributed/             # 分布式模块
+│   │   ├── master.ts            # 主节点（任务调度）
+│   │   ├── worker.ts            # 工作节点（执行扫描）
+│   │   ├── queue.ts             # 任务队列
+│   │   ├── coordinator.ts       # 协调器
+│   │   └── protocol.ts          # 通信协议
 │   │
-│   ├── api/                     # API 服务 (商业版)
-│   │   ├── server.ts            # API 服务器
-│   │   ├── routes/              # API 路由
-│   │   └── middleware/          # 中间件
+│   ├── api/                     # API 服务
+│   │   ├── server.ts            # HTTP 服务器
+│   │   ├── routes/
+│   │   │   ├── scan.ts          # 扫描相关 API
+│   │   │   ├── poc.ts           # POC 相关 API
+│   │   │   └── vulndb.ts        # 漏洞库 API
+│   │   └── websocket.ts         # WebSocket 实时推送
 │   │
 │   ├── cli/                     # 命令行接口
-│   │   ├── index.ts             # CLI 入口
-│   │   ├── commands/            # 子命令
-│   │   └── output.ts            # 输出格式化
+│   │   ├── index.ts
+│   │   └── commands/
 │   │
-│   └── utils/                   # 工具函数
-│       ├── logger.ts            # 日志工具
-│       ├── cache.ts             # 缓存管理
-│       └── config.ts            # 配置管理
+│   └── utils/
+│       ├── logger.ts
+│       ├── cache.ts
+│       └── config.ts
 │
-├── data/                        # 静态数据
-│   ├── fingerprints/            # 指纹数据库
+├── data/
 │   ├── wordlists/               # 枚举字典
-│   └── vulndb/                  # 漏洞数据库快照
+│   │   ├── plugins-popular.txt  # 热门插件 (~1000)
+│   │   ├── plugins-full.txt     # 完整插件 (~100000)
+│   │   ├── themes-popular.txt
+│   │   └── themes-full.txt
+│   └── vulndb/                  # 漏洞数据库
 │
-├── tests/                       # 测试
-│   ├── unit/                    # 单元测试
-│   ├── integration/             # 集成测试
-│   └── fixtures/                # 测试数据
+├── poc-modules/                 # 外部 POC 模块（可扩展）
+│   └── custom/                  # 用户自定义 POC
 │
-├── docs/                        # 文档
-│   ├── api/                     # API 文档
-│   ├── guides/                  # 使用指南
-│   └── development/             # 开发文档
-│
-├── scripts/                     # 构建脚本
-│   ├── build.ts                 # 构建脚本
-│   ├── update-vulndb.ts         # 漏洞库更新
-│   └── generate-fingerprints.ts # 指纹生成
-│
+├── tests/
+├── docs/
+├── scripts/
 ├── package.json
 ├── tsconfig.json
-├── .env.example
-└── README.md
+└── docker-compose.yml           # 分布式部署配置
 ```
 
 ---
@@ -105,415 +205,782 @@ wpsan/
 ## 技术栈
 
 ### 核心技术
-- **语言**: TypeScript (Node.js 18+)
-- **HTTP 客户端**: undici (高性能) 或 got
-- **CLI 框架**: commander 或 yargs
-- **数据库**: SQLite (本地) / PostgreSQL (服务端)
-- **缓存**: Redis (可选)
+- **语言**: TypeScript (Node.js 20+)
+- **HTTP 客户端**: undici (高性能 HTTP/1.1 & HTTP/2)
+- **数据库**: PostgreSQL (主数据库) + Redis (缓存/队列)
+- **消息队列**: BullMQ (基于 Redis)
+- **API 框架**: Fastify
+- **WebSocket**: ws 或 Socket.io
 
-### 测试
-- **框架**: Vitest
-- **覆盖率**: c8
+### 分布式
+- **容器化**: Docker + Docker Compose
+- **编排**: Kubernetes (可选)
+- **服务发现**: Consul 或 etcd (可选)
 
-### 构建与发布
-- **打包**: tsup 或 esbuild
-- **发布**: npm / Docker
-
----
-
-## 开发规范
-
-### 代码风格
-
-```typescript
-// 使用 ESM 模块
-import { Scanner } from './core/scanner.js';
-
-// 接口命名：I 前缀
-interface IScanResult {
-  target: string;
-  findings: IFinding[];
-  timestamp: Date;
-}
-
-// 类型命名：大驼峰
-type ScanOptions = {
-  timeout: number;
-  userAgent: string;
-  throttle: number;
-};
-
-// 常量：全大写下划线
-const DEFAULT_TIMEOUT = 30000;
-const MAX_CONCURRENT_REQUESTS = 10;
-
-// 异步函数统一使用 async/await
-async function detectVersion(url: string): Promise<string | null> {
-  // ...
-}
-```
-
-### 错误处理
-
-```typescript
-// 自定义错误类
-class WPSanError extends Error {
-  constructor(
-    message: string,
-    public code: string,
-    public details?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'WPSanError';
-  }
-}
-
-// 使用 Result 模式处理可预期的失败
-type Result<T, E = WPSanError> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
-```
-
-### 日志规范
-
-```typescript
-import { logger } from './utils/logger.js';
-
-// 使用结构化日志
-logger.info('Scanning target', { url, options });
-logger.debug('HTTP request', { method, path, status });
-logger.warn('Rate limited', { retryAfter });
-logger.error('Scan failed', { error, target });
-```
+### 前端 (Web UI)
+- **框架**: Vue 3 或 React
+- **状态管理**: Pinia 或 Zustand
+- **UI 组件**: Element Plus 或 Ant Design
 
 ---
 
 ## 核心功能设计
 
-### 1. WordPress 版本检测
-
-检测方法（按优先级）：
+### 1. WordPress 识别
 
 ```typescript
-const VERSION_DETECTION_METHODS = [
-  // 1. Meta generator 标签
-  { method: 'meta_generator', path: '/', pattern: /<meta name="generator" content="WordPress ([0-9.]+)"/ },
+// src/detectors/01-wordpress/detector.ts
 
-  // 2. Feed 中的版本
-  { method: 'feed', path: '/feed/', pattern: /<generator>.*WordPress\/([0-9.]+)<\/generator>/ },
-
-  // 3. readme.html (常被删除)
-  { method: 'readme', path: '/readme.html', pattern: /Version ([0-9.]+)/ },
-
-  // 4. CSS/JS 版本参数
-  { method: 'asset_version', path: '/wp-includes/css/dist/block-library/style.min.css', pattern: /ver=([0-9.]+)/ },
-
-  // 5. OPML 链接
-  { method: 'opml', path: '/wp-links-opml.php', pattern: /generator="WordPress\/([0-9.]+)"/ },
-
-  // 6. REST API
-  { method: 'rest_api', path: '/wp-json/', field: 'description' },
-
-  // 7. 文件哈希比对 (高级)
-  { method: 'hash_compare', files: [...], database: 'version_hashes.json' }
-];
-```
-
-### 2. 插件枚举
-
-```typescript
-// 枚举策略
-enum EnumerationMode {
-  PASSIVE = 'passive',     // 仅从页面源码提取
-  AGGRESSIVE = 'aggressive' // 主动探测常见路径
+interface IWordPressDetectionResult {
+  isWordPress: boolean;
+  confidence: number;        // 0-100
+  indicators: string[];      // 检测到的特征
 }
 
-// 插件检测路径
-const PLUGIN_DETECTION_PATHS = [
-  '/wp-content/plugins/{slug}/readme.txt',
-  '/wp-content/plugins/{slug}/style.css',
-  '/wp-content/plugins/{slug}/package.json',
-  '/wp-content/plugins/{slug}/{slug}.php'
+const WP_INDICATORS = [
+  // HTML 特征
+  { type: 'html', pattern: /wp-content\//, weight: 30 },
+  { type: 'html', pattern: /wp-includes\//, weight: 30 },
+  { type: 'html', pattern: /<meta name="generator" content="WordPress/, weight: 50 },
+
+  // HTTP 头特征
+  { type: 'header', name: 'X-Powered-By', pattern: /WordPress/, weight: 40 },
+  { type: 'header', name: 'Link', pattern: /wp-json/, weight: 35 },
+
+  // 路径探测
+  { type: 'path', path: '/wp-login.php', status: 200, weight: 50 },
+  { type: 'path', path: '/wp-admin/', status: [200, 301, 302], weight: 40 },
+  { type: 'path', path: '/xmlrpc.php', status: 200, weight: 30 },
+  { type: 'path', path: '/wp-json/', status: 200, weight: 45 },
+
+  // Cookie 特征
+  { type: 'cookie', pattern: /wordpress_/, weight: 35 },
 ];
 
-// 版本提取模式
-const VERSION_PATTERNS = [
-  /Stable tag:\s*([0-9.]+)/i,
-  /Version:\s*([0-9.]+)/i,
-  /"version":\s*"([0-9.]+)"/
+// 置信度阈值
+const CONFIDENCE_THRESHOLD = 60;
+```
+
+### 2. WAF/CDN 检测
+
+```typescript
+// src/detectors/02-waf/detector.ts
+
+interface IWafDetectionResult {
+  detected: boolean;
+  type: 'cloudflare' | 'sucuri' | 'wordfence' | 'akamai' | 'incapsula' | 'generic' | null;
+  details: {
+    bypassPossible: boolean;
+    realIp?: string;         // 如果能获取真实 IP
+    notes: string[];
+  };
+}
+
+// Cloudflare 检测
+const CLOUDFLARE_INDICATORS = {
+  headers: ['cf-ray', 'cf-cache-status', 'cf-request-id'],
+  cookies: ['__cfduid', '__cf_bm'],
+  serverHeader: /cloudflare/i,
+  errorPage: /cloudflare|cf-error/i,
+  ipRanges: ['173.245.48.0/20', '103.21.244.0/22', ...],  // CF IP 段
+};
+
+// Sucuri 检测
+const SUCURI_INDICATORS = {
+  headers: ['x-sucuri-id', 'x-sucuri-cache'],
+  serverHeader: /Sucuri/i,
+  cookies: ['sucuri_'],
+};
+
+// Wordfence 检测
+const WORDFENCE_INDICATORS = {
+  cookies: ['wfvt_', 'wordfence_'],
+  blockPage: /wordfence|wf-blocked/i,
+};
+```
+
+### 3. WordPress 版本检测
+
+```typescript
+// src/detectors/03-version/detector.ts
+
+interface IVersionDetectionResult {
+  version: string | null;
+  method: string;            // 使用的检测方法
+  confidence: number;
+}
+
+// 检测方法（按可靠性排序）
+const VERSION_METHODS = [
+  {
+    name: 'meta_generator',
+    path: '/',
+    extract: (html: string) => {
+      const match = html.match(/<meta name="generator" content="WordPress ([0-9.]+)"/);
+      return match?.[1] || null;
+    },
+    confidence: 95,
+  },
+  {
+    name: 'feed_generator',
+    path: '/feed/',
+    extract: (xml: string) => {
+      const match = xml.match(/<generator>.*WordPress\/([0-9.]+)<\/generator>/);
+      return match?.[1] || null;
+    },
+    confidence: 95,
+  },
+  {
+    name: 'opml',
+    path: '/wp-links-opml.php',
+    extract: (xml: string) => {
+      const match = xml.match(/generator="WordPress\/([0-9.]+)"/);
+      return match?.[1] || null;
+    },
+    confidence: 90,
+  },
+  {
+    name: 'readme',
+    path: '/readme.html',
+    extract: (html: string) => {
+      const match = html.match(/Version ([0-9.]+)/);
+      return match?.[1] || null;
+    },
+    confidence: 85,
+  },
+  {
+    name: 'css_version',
+    path: '/',
+    extract: (html: string) => {
+      const match = html.match(/wp-includes\/css\/.*\?ver=([0-9.]+)/);
+      return match?.[1] || null;
+    },
+    confidence: 70,
+  },
+  {
+    name: 'js_version',
+    path: '/',
+    extract: (html: string) => {
+      const match = html.match(/wp-includes\/js\/.*\?ver=([0-9.]+)/);
+      return match?.[1] || null;
+    },
+    confidence: 70,
+  },
+  {
+    name: 'hash_compare',
+    files: [
+      '/wp-includes/version.php',
+      '/wp-includes/css/admin-bar.min.css',
+    ],
+    database: 'version_hashes.json',
+    confidence: 99,
+  },
 ];
 ```
 
-### 3. 用户枚举
+### 4. 插件枚举
 
 ```typescript
-// 无入侵用户枚举方法
-const USER_ENUM_METHODS = [
-  // 1. 作者归档页面
-  { method: 'author_archives', path: '/?author={id}' },
+// src/detectors/04-plugins/enumerator.ts
 
-  // 2. REST API (如未禁用)
-  { method: 'rest_api', path: '/wp-json/wp/v2/users' },
+interface IPlugin {
+  slug: string;
+  name?: string;
+  detected: boolean;
+  method: 'passive' | 'aggressive';
+}
 
-  // 3. oEmbed
-  { method: 'oembed', path: '/wp-json/oembed/1.0/embed?url={post_url}' },
+// 被动枚举：从页面源码提取
+async function passiveEnumeration(html: string): Promise<IPlugin[]> {
+  const plugins: IPlugin[] = [];
 
-  // 4. RSS Feed 作者信息
-  { method: 'feed', path: '/feed/', extract: 'dc:creator' }
+  // 从 wp-content/plugins/ 路径提取
+  const pluginPaths = html.matchAll(/wp-content\/plugins\/([^\/'"]+)/g);
+  for (const match of pluginPaths) {
+    plugins.push({ slug: match[1], detected: true, method: 'passive' });
+  }
+
+  return [...new Set(plugins)];
+}
+
+// 主动枚举：字典探测
+async function aggressiveEnumeration(
+  target: string,
+  wordlist: string[],
+  concurrency: number = 10
+): Promise<IPlugin[]> {
+  const plugins: IPlugin[] = [];
+
+  // 探测路径
+  const paths = [
+    '/wp-content/plugins/{slug}/readme.txt',
+    '/wp-content/plugins/{slug}/',
+  ];
+
+  // 并发探测
+  for (const slug of wordlist) {
+    for (const pathTemplate of paths) {
+      const path = pathTemplate.replace('{slug}', slug);
+      const response = await httpClient.head(target + path);
+
+      if (response.status === 200) {
+        plugins.push({ slug, detected: true, method: 'aggressive' });
+        break;  // 找到就跳过该插件的其他路径
+      }
+    }
+  }
+
+  return plugins;
+}
+```
+
+### 5. 插件版本检测
+
+```typescript
+// src/detectors/06-plugin-version/detector.ts
+
+interface IPluginWithVersion extends IPlugin {
+  version: string | null;
+  versionSource: string;     // 版本来源
+}
+
+// 版本提取位置
+const VERSION_SOURCES = [
+  {
+    name: 'readme.txt',
+    path: '/wp-content/plugins/{slug}/readme.txt',
+    patterns: [
+      /Stable tag:\s*([0-9][0-9.]*)/i,
+      /Version:\s*([0-9][0-9.]*)/i,
+    ],
+  },
+  {
+    name: 'main_plugin_file',
+    path: '/wp-content/plugins/{slug}/{slug}.php',
+    patterns: [
+      /Version:\s*([0-9][0-9.]*)/i,
+      /\* @version\s+([0-9][0-9.]*)/i,
+    ],
+  },
+  {
+    name: 'package.json',
+    path: '/wp-content/plugins/{slug}/package.json',
+    extract: (json: string) => JSON.parse(json).version,
+  },
+  {
+    name: 'changelog',
+    path: '/wp-content/plugins/{slug}/changelog.txt',
+    patterns: [
+      /= ([0-9][0-9.]*) =/,
+      /Version ([0-9][0-9.]*)/i,
+    ],
+  },
 ];
 ```
 
-### 4. POC 验证框架
+### 6. POC 可扩展架构
 
 ```typescript
-// POC 模块接口
-interface IPocModule {
-  id: string;
-  name: string;
-  description: string;
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+// src/poc/base.ts - POC 基类
+
+export abstract class BasePoc {
+  abstract readonly id: string;           // 唯一标识
+  abstract readonly name: string;         // POC 名称
+  abstract readonly description: string;  // 描述
+  abstract readonly cve?: string;         // CVE 编号
+  abstract readonly severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
 
   // 适用条件
-  conditions: {
-    wordpress?: string;      // 版本范围，如 "< 5.8.0"
-    plugin?: { name: string; version: string };
-    theme?: { name: string; version: string };
-  };
-
-  // 验证函数
-  verify(target: string, context: IScanContext): Promise<IPocResult>;
-}
-
-// POC 结果
-interface IPocResult {
-  vulnerable: boolean;
-  evidence?: string;        // 漏洞证据
-  details?: Record<string, unknown>;
-}
-```
-
-**POC 编写原则：**
-1. 仅验证，不利用（不执行任何破坏性操作）
-2. 无条件触发（不需要认证或特殊配置）
-3. 提供明确的漏洞证据
-4. 包含误报检测逻辑
-
----
-
-## 漏洞数据库设计
-
-### 数据模型
-
-```typescript
-interface IVulnerability {
-  id: string;                // 内部 ID
-  cve?: string;              // CVE 编号
-  title: string;
-  description: string;
-
-  affected: {
+  abstract readonly conditions: {
     type: 'core' | 'plugin' | 'theme';
-    slug?: string;           // 插件/主题 slug
-    versions: string;        // 受影响版本范围
+    slug?: string;                        // 插件/主题 slug
+    versionRange: string;                 // 受影响版本，如 "< 3.5.0"
   };
 
-  severity: {
-    level: 'critical' | 'high' | 'medium' | 'low';
-    cvss?: number;
+  // 验证方法（子类实现）
+  abstract verify(context: IPocContext): Promise<IPocResult>;
+}
+
+// src/poc/registry.ts - POC 注册表
+
+class PocRegistry {
+  private pocs: Map<string, BasePoc> = new Map();
+
+  // 注册 POC
+  register(poc: BasePoc): void {
+    this.pocs.set(poc.id, poc);
+  }
+
+  // 根据插件/主题查找关联的 POC
+  findByTarget(type: string, slug: string, version: string): BasePoc[] {
+    return Array.from(this.pocs.values()).filter(poc => {
+      if (poc.conditions.type !== type) return false;
+      if (poc.conditions.slug && poc.conditions.slug !== slug) return false;
+      return semver.satisfies(version, poc.conditions.versionRange);
+    });
+  }
+
+  // 热加载 POC 模块
+  async loadFromDirectory(dir: string): Promise<void> {
+    const files = await glob(`${dir}/**/*.poc.ts`);
+    for (const file of files) {
+      const module = await import(file);
+      if (module.default instanceof BasePoc) {
+        this.register(module.default);
+      }
+    }
+  }
+}
+
+// src/poc/modules/plugins/elementor/CVE-2024-XXXX.poc.ts - POC 示例
+
+export default class ElementorRcePoc extends BasePoc {
+  readonly id = 'elementor-rce-2024-xxxx';
+  readonly name = 'Elementor Remote Code Execution';
+  readonly description = 'Elementor plugin allows unauthenticated RCE via...';
+  readonly cve = 'CVE-2024-XXXX';
+  readonly severity = 'critical';
+
+  readonly conditions = {
+    type: 'plugin' as const,
+    slug: 'elementor',
+    versionRange: '< 3.5.0',
   };
 
-  references: string[];      // 参考链接
-  poc?: string;              // POC 模块 ID
+  async verify(context: IPocContext): Promise<IPocResult> {
+    // 构造验证请求
+    const payload = '...';
+    const response = await context.http.post(
+      `${context.target}/wp-admin/admin-ajax.php`,
+      { action: 'elementor_...' , data: payload }
+    );
 
-  published: Date;
-  updated: Date;
+    // 判断漏洞是否存在
+    const vulnerable = response.body.includes('specific_indicator');
+
+    return {
+      vulnerable,
+      evidence: vulnerable ? response.body.substring(0, 500) : undefined,
+      details: { statusCode: response.status },
+    };
+  }
 }
 ```
 
-### 数据源
-
-1. **WPVulnDB API** - 官方漏洞数据库
-2. **NVD (National Vulnerability Database)** - CVE 数据
-3. **Exploit-DB** - 公开漏洞
-4. **自建收集** - 安全公告、博客等
-
----
-
-## CLI 命令设计
-
-```bash
-# 基础扫描
-wpsan scan https://example.com
-
-# 指定扫描模块
-wpsan scan https://example.com --modules=version,plugins,themes,users
-
-# 仅枚举
-wpsan enum plugins https://example.com --wordlist=popular.txt
-
-# 漏洞检测
-wpsan vuln https://example.com --severity=high,critical
-
-# POC 验证
-wpsan poc https://example.com --poc-id=CVE-2023-xxxx
-
-# 生成报告
-wpsan scan https://example.com --output=report.pdf --format=pdf
-
-# 批量扫描
-wpsan scan --targets=urls.txt --output-dir=./reports
-
-# 更新数据库
-wpsan update vulndb
-wpsan update fingerprints
-```
-
----
-
-## API 设计 (商业版)
-
-### RESTful 端点
-
-```
-POST /api/v1/scans           # 创建扫描任务
-GET  /api/v1/scans/:id       # 获取扫描结果
-GET  /api/v1/scans           # 列出扫描历史
-
-GET  /api/v1/vulndb/search   # 搜索漏洞库
-GET  /api/v1/vulndb/:id      # 获取漏洞详情
-
-POST /api/v1/reports         # 生成报告
-GET  /api/v1/reports/:id     # 下载报告
-```
-
-### WebSocket 实时更新
+### 7. POC 关联与触发
 
 ```typescript
-// 扫描进度实时推送
-ws.on('scan:progress', { scanId, progress, currentModule });
-ws.on('scan:finding', { scanId, finding });
-ws.on('scan:complete', { scanId, summary });
+// 扫描结果数据结构
+
+interface IScanResult {
+  target: string;
+  timestamp: Date;
+
+  // 各阶段结果
+  wordpress: IWordPressDetectionResult;
+  waf: IWafDetectionResult;
+  version: IVersionDetectionResult;
+  plugins: IPluginWithVersion[];
+  themes: IThemeWithVersion[];
+
+  // 漏洞匹配结果（包含关联的 POC）
+  vulnerabilities: IVulnerabilityMatch[];
+}
+
+interface IVulnerabilityMatch {
+  vulnerability: IVulnerability;      // 漏洞信息
+  affectedComponent: {
+    type: 'core' | 'plugin' | 'theme';
+    slug?: string;
+    version: string;
+  };
+  pocs: IPocInfo[];                   // 关联的 POC 列表
+}
+
+interface IPocInfo {
+  id: string;
+  name: string;
+  severity: string;
+  canRun: boolean;                    // 是否可执行
+}
+
+// API: 获取扫描结果
+// GET /api/v1/scans/:scanId
+// Response: IScanResult
+
+// API: 执行 POC
+// POST /api/v1/scans/:scanId/poc/:pocId/run
+// Response: IPocResult
 ```
 
 ---
 
-## 安全考虑
+## 分布式架构设计
 
-### 合规要求
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           WPSan 分布式架构                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-1. **授权扫描** - 用户必须确认有权扫描目标
-2. **速率限制** - 默认限制请求频率，避免对目标造成压力
-3. **日志记录** - 记录所有扫描行为用于审计
-4. **数据保护** - 扫描结果加密存储
-
-### 请求伪装
-
-```typescript
-// User-Agent 轮换
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36...',
-  // ...
-];
-
-// 请求间隔随机化
-const DELAY_RANGE = { min: 100, max: 500 }; // ms
+                              ┌─────────────┐
+                              │   Web UI    │
+                              │  (Vue/React)│
+                              └──────┬──────┘
+                                     │
+                                     ▼
+                              ┌─────────────┐
+                              │  API Server │
+                              │  (Fastify)  │
+                              └──────┬──────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+              ▼                      ▼                      ▼
+       ┌─────────────┐        ┌─────────────┐        ┌─────────────┐
+       │   Master    │◄──────►│    Redis    │◄──────►│  PostgreSQL │
+       │  (调度器)   │        │ (队列/缓存)  │        │  (持久化)   │
+       └──────┬──────┘        └─────────────┘        └─────────────┘
+              │
+              │ 任务分发
+    ┌─────────┼─────────┬─────────────┐
+    │         │         │             │
+    ▼         ▼         ▼             ▼
+┌────────┐┌────────┐┌────────┐   ┌────────┐
+│Worker 1││Worker 2││Worker 3│...│Worker N│
+│  扫描   ││  扫描   ││  扫描   │   │  扫描   │
+└────────┘└────────┘└────────┘   └────────┘
 ```
 
----
+### 组件职责
 
-## 测试策略
+| 组件 | 职责 |
+|------|------|
+| **Web UI** | 用户交互界面，提交扫描任务，查看结果，点击运行 POC |
+| **API Server** | RESTful API，处理请求，返回结果 |
+| **Master** | 任务调度，负载均衡，监控 Worker 状态 |
+| **Worker** | 执行实际扫描任务，运行 POC |
+| **Redis** | 任务队列（BullMQ），结果缓存，实时状态 |
+| **PostgreSQL** | 持久化存储（扫描结果、漏洞库、用户数据） |
 
-### 单元测试
+### 任务队列设计
 
 ```typescript
-// tests/unit/detectors/version.test.ts
-import { describe, it, expect } from 'vitest';
-import { detectVersion } from '../../../src/detectors/wordpress/version.js';
+// src/distributed/queue.ts
 
-describe('WordPress Version Detection', () => {
-  it('should detect version from meta generator', async () => {
-    const html = '<meta name="generator" content="WordPress 6.4.2">';
-    const result = await detectVersion(mockTarget(html));
-    expect(result).toBe('6.4.2');
-  });
+import { Queue, Worker, Job } from 'bullmq';
+
+// 扫描任务队列
+const scanQueue = new Queue('scan-tasks', { connection: redis });
+
+// 任务类型
+interface IScanJob {
+  type: 'full_scan' | 'plugin_enum' | 'poc_verify';
+  target: string;
+  options: {
+    stages?: string[];        // 指定执行的阶段
+    pocId?: string;           // POC 验证时的 POC ID
+    pluginSlug?: string;      // 特定插件扫描
+  };
+  priority: number;           // 优先级
+  userId: string;
+}
+
+// Worker 处理任务
+const worker = new Worker('scan-tasks', async (job: Job<IScanJob>) => {
+  const { type, target, options } = job.data;
+
+  switch (type) {
+    case 'full_scan':
+      return await runFullScan(target, options);
+    case 'plugin_enum':
+      return await runPluginEnumeration(target, options);
+    case 'poc_verify':
+      return await runPocVerification(target, options);
+  }
+}, { connection: redis, concurrency: 5 });
+
+// 任务进度上报
+worker.on('progress', (job, progress) => {
+  // 通过 WebSocket 推送进度
+  wsServer.broadcast(`scan:${job.id}`, { progress });
 });
 ```
 
-### 集成测试
-
-使用本地 WordPress Docker 环境进行集成测试。
-
-```yaml
-# docker-compose.test.yml
-services:
-  wordpress:
-    image: wordpress:6.4
-    ports:
-      - "8080:80"
-```
-
----
-
-## 发布与部署
-
-### NPM 包发布
-
-```bash
-npm version patch|minor|major
-npm publish
-```
-
-### Docker 镜像
-
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY dist ./dist
-ENTRYPOINT ["node", "dist/cli/index.js"]
-```
-
-### 许可证管理 (商业版)
+### Worker 扩展
 
 ```typescript
-interface ILicense {
-  key: string;
-  type: 'trial' | 'pro' | 'enterprise';
-  features: string[];
-  expiresAt: Date;
-  maxTargets?: number;  // 并发扫描目标数
-  maxScansPerDay?: number;
+// src/distributed/worker.ts
+
+class ScanWorker {
+  private id: string;
+  private status: 'idle' | 'busy' | 'offline';
+  private currentJob: Job | null;
+
+  constructor() {
+    this.id = generateWorkerId();
+    this.registerWithMaster();
+  }
+
+  // 向 Master 注册
+  async registerWithMaster(): Promise<void> {
+    await redis.hset('workers', this.id, JSON.stringify({
+      status: 'idle',
+      registeredAt: Date.now(),
+      capabilities: ['scan', 'poc'],
+    }));
+  }
+
+  // 心跳
+  async heartbeat(): Promise<void> {
+    await redis.hset('workers', this.id, JSON.stringify({
+      status: this.status,
+      lastHeartbeat: Date.now(),
+      currentJob: this.currentJob?.id,
+    }));
+  }
 }
 ```
 
 ---
 
-## AI 助手开发指南
+## API 设计
 
-### 开发新检测模块
+### RESTful 端点
 
-1. 在 `src/detectors/` 下创建模块文件
-2. 实现 `IDetector` 接口
-3. 注册到 `scanner.ts` 的检测器列表
-4. 编写单元测试
-5. 更新 CLI 命令支持
+```typescript
+// 扫描相关
+POST   /api/v1/scans                    // 创建扫描任务
+GET    /api/v1/scans                    // 获取扫描列表
+GET    /api/v1/scans/:id                // 获取扫描详情
+DELETE /api/v1/scans/:id                // 删除扫描记录
 
-### 添加新 POC
+// POC 相关
+GET    /api/v1/scans/:id/pocs           // 获取扫描关联的 POC 列表
+POST   /api/v1/scans/:id/pocs/:pocId/run // 执行指定 POC
+GET    /api/v1/pocs                     // 获取所有 POC 列表
+GET    /api/v1/pocs/:id                 // 获取 POC 详情
 
-1. 在 `src/poc/modules/` 下创建 POC 文件
-2. 实现 `IPocModule` 接口
-3. **确保仅验证不利用**
-4. 添加到漏洞数据库关联
-5. 编写测试用例
+// 漏洞库
+GET    /api/v1/vulns                    // 搜索漏洞库
+GET    /api/v1/vulns/:id                // 获取漏洞详情
+POST   /api/v1/vulns/sync               // 同步漏洞库
 
-### 更新漏洞库
+// 系统状态
+GET    /api/v1/system/workers           // 获取 Worker 状态
+GET    /api/v1/system/stats             // 获取系统统计
+```
 
-1. 运行 `scripts/update-vulndb.ts`
-2. 验证数据格式
-3. 更新版本号
-4. 提交数据文件
+### WebSocket 事件
+
+```typescript
+// 客户端连接后订阅扫描进度
+ws.subscribe(`scan:${scanId}`);
+
+// 服务端推送事件
+ws.emit('scan:stage', { stage: 'plugins', status: 'running' });
+ws.emit('scan:plugin_found', { slug: 'woocommerce', version: '8.0.0' });
+ws.emit('scan:vulnerability', { cve: 'CVE-2024-xxx', severity: 'high' });
+ws.emit('scan:complete', { summary: {...} });
+
+// POC 执行进度
+ws.emit('poc:started', { pocId: '...' });
+ws.emit('poc:result', { pocId: '...', vulnerable: true, evidence: '...' });
+```
+
+---
+
+## 数据模型
+
+### 扫描结果
+
+```typescript
+// PostgreSQL Schema
+
+interface Scan {
+  id: string;
+  target: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+
+  // 扫描结果
+  isWordPress: boolean;
+  wpVersion: string | null;
+  wafDetected: boolean;
+  wafType: string | null;
+
+  // 时间戳
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+
+  // 关联
+  userId: string;
+}
+
+interface ScanPlugin {
+  id: string;
+  scanId: string;
+  slug: string;
+  name: string | null;
+  version: string | null;
+  detectionMethod: string;
+}
+
+interface ScanTheme {
+  id: string;
+  scanId: string;
+  slug: string;
+  name: string | null;
+  version: string | null;
+}
+
+interface ScanVulnerability {
+  id: string;
+  scanId: string;
+  vulnId: string;           // 关联漏洞库
+  componentType: string;
+  componentSlug: string;
+  componentVersion: string;
+}
+
+interface PocExecution {
+  id: string;
+  scanId: string;
+  pocId: string;
+  status: 'pending' | 'running' | 'success' | 'failed';
+  vulnerable: boolean | null;
+  evidence: string | null;
+  executedAt: Date;
+}
+```
+
+### 漏洞库
+
+```typescript
+interface Vulnerability {
+  id: string;
+  cve: string | null;
+  title: string;
+  description: string;
+
+  // 影响范围
+  componentType: 'core' | 'plugin' | 'theme';
+  componentSlug: string | null;
+  affectedVersions: string;   // semver range
+  fixedVersion: string | null;
+
+  // 严重性
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  cvssScore: number | null;
+
+  // POC 关联
+  pocIds: string[];
+
+  // 参考
+  references: string[];
+
+  // 时间
+  publishedAt: Date;
+  updatedAt: Date;
+}
+```
+
+---
+
+## Docker 部署
+
+```yaml
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # API 服务
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/wpsan
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    depends_on:
+      - db
+      - redis
+
+  # Master 调度器
+  master:
+    build: .
+    command: npm run start:master
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  # Worker (可扩展)
+  worker:
+    build: .
+    command: npm run start:worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    deploy:
+      replicas: 3              # 默认 3 个 Worker
+
+  # PostgreSQL
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=wpsan
+      - POSTGRES_PASSWORD=password
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+### 扩展 Worker
+
+```bash
+# 手动扩展 Worker 数量
+docker-compose up -d --scale worker=10
+```
+
+---
+
+## 开发规范
+
+### POC 开发规范
+
+1. **命名规则**: `{component}-{vuln-type}-{cve/date}.poc.ts`
+2. **继承基类**: 必须继承 `BasePoc`
+3. **仅验证**: 禁止执行破坏性操作
+4. **无条件触发**: 不依赖认证或特殊配置
+5. **提供证据**: 返回明确的漏洞证据
+6. **错误处理**: 捕获异常，不影响整体流程
+
+### 目录结构约定
+
+- 检测器按执行顺序编号: `01-wordpress`, `02-waf`...
+- POC 按组件类型分目录: `wordpress/`, `plugins/`, `themes/`
+- 插件 POC 再按插件 slug 分目录
+
+### Git 提交规范
+
+```
+feat(detector): add Cloudflare detection
+fix(poc): fix false positive in elementor poc
+chore(deps): update dependencies
+docs: update API documentation
+```
 
 ---
 
@@ -521,47 +988,59 @@ interface ILicense {
 
 ```bash
 # 开发
-npm run dev           # 开发模式
-npm run build         # 构建
-npm run test          # 运行测试
-npm run lint          # 代码检查
+npm run dev                    # 开发模式 (API)
+npm run dev:worker             # 开发模式 (Worker)
+npm run build                  # 构建
+
+# 测试
+npm run test                   # 运行测试
+npm run test:poc               # 测试 POC 模块
 
 # 数据库
-npm run vulndb:update # 更新漏洞库
-npm run vulndb:stats  # 漏洞统计
+npm run db:migrate             # 运行迁移
+npm run db:seed                # 填充测试数据
+npm run vulndb:sync            # 同步漏洞库
 
-# 发布
-npm run release       # 发布新版本
+# Docker
+docker-compose up -d           # 启动所有服务
+docker-compose up -d --scale worker=5  # 扩展 Worker
+docker-compose logs -f worker  # 查看 Worker 日志
+
+# POC 开发
+npm run poc:create             # 创建 POC 模板
+npm run poc:validate           # 验证 POC 格式
 ```
 
 ---
 
 ## 路线图
 
-### Phase 1: MVP (核心功能)
-- [ ] 项目初始化与基础架构
-- [ ] WordPress 版本检测
-- [ ] 插件/主题枚举
+### Phase 1: MVP
+- [ ] 核心扫描流程（7 个阶段）
 - [ ] 基础漏洞匹配
-- [ ] CLI 基础命令
-- [ ] JSON 报告输出
+- [ ] CLI 工具
+- [ ] 单节点运行
 
-### Phase 2: 增强功能
-- [ ] 用户枚举
-- [ ] 安全配置检测
-- [ ] POC 验证框架
-- [ ] PDF/HTML 报告
-- [ ] 漏洞库自动更新
+### Phase 2: POC 框架
+- [ ] POC 可扩展架构
+- [ ] POC 热加载
+- [ ] 常见插件 POC (Top 50)
+- [ ] POC 执行 API
 
-### Phase 3: 商业化
-- [ ] API 服务
-- [ ] Web 界面
-- [ ] 许可证管理
-- [ ] 多租户支持
-- [ ] 定时扫描
+### Phase 3: 分布式
+- [ ] Master/Worker 架构
+- [ ] 任务队列
+- [ ] Worker 自动扩展
+- [ ] 负载均衡
 
-### Phase 4: 高级功能
-- [ ] 分布式扫描
-- [ ] 自定义规则引擎
-- [ ] 集成 CI/CD
-- [ ] SIEM 集成
+### Phase 4: Web UI
+- [ ] 扫描管理界面
+- [ ] 实时进度展示
+- [ ] POC 一键执行
+- [ ] 报告导出
+
+### Phase 5: 商业化
+- [ ] 用户管理
+- [ ] 许可证系统
+- [ ] API 配额
+- [ ] 高级报告
