@@ -90,117 +90,99 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 
 ```
 wpsan/
-├── src/
-│   ├── core/                    # 核心引擎
-│   │   ├── scanner.ts           # 扫描器主类（流程编排）
-│   │   ├── pipeline.ts          # 扫描管道（阶段控制）
-│   │   ├── http-client.ts       # HTTP 客户端封装
-│   │   └── rate-limiter.ts      # 请求限速器
+├── app/
+│   ├── Console/
+│   │   └── Commands/            # CLI 命令
+│   │       ├── ImportTargets.php
+│   │       ├── ScanTargets.php
+│   │       ├── RunPoc.php
+│   │       └── UpdateCfIps.php
 │   │
-│   ├── targets/                 # 目标资产管理（支持50万+）
-│   │   ├── manager.ts           # 资产管理器
-│   │   ├── importer.ts          # 批量导入器
-│   │   ├── parsers/             # 文件解析器
-│   │   │   ├── txt-parser.ts    # TXT 解析 (一行一个URL)
-│   │   │   └── csv-parser.ts    # CSV 解析 (支持多列)
-│   │   ├── validator.ts         # URL 验证/去重
-│   │   └── group.ts             # 资产分组
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   │   ├── TargetController.php
+│   │   │   ├── ScanController.php
+│   │   │   ├── PocController.php
+│   │   │   └── VulnController.php
+│   │   └── Middleware/
+│   │       └── ApiKeyAuth.php   # API Key 认证
 │   │
-│   ├── detectors/               # 检测模块（按扫描顺序）
-│   │   ├── 01-wordpress/        # Step 1: WordPress 识别
-│   │   │   ├── detector.ts      # 主检测器
-│   │   │   └── signatures.ts    # WP 特征签名
+│   ├── Models/                  # 数据模型
+│   │   ├── Target.php
+│   │   ├── TargetGroup.php
+│   │   ├── ScanResult.php
+│   │   ├── ScanPlugin.php
+│   │   ├── ScanTheme.php
+│   │   ├── Vulnerability.php
+│   │   ├── Poc.php
+│   │   └── ImportJob.php
+│   │
+│   ├── Services/                # 业务逻辑
+│   │   ├── Scanner/
+│   │   │   ├── ScannerService.php       # 扫描主服务
+│   │   │   ├── WordPressDetector.php    # WP 识别
+│   │   │   ├── CloudflareDetector.php   # CF 检测 (IP段)
+│   │   │   ├── VersionDetector.php      # 版本检测
+│   │   │   ├── AssetParser.php          # 资产解析
+│   │   │   ├── PluginVersionDetector.php
+│   │   │   └── ThemeVersionDetector.php
 │   │   │
-│   │   ├── 02-cloudflare/       # Step 2: Cloudflare 检测 (IP段)
-│   │   │   ├── detector.ts      # 检测器
-│   │   │   └── ip-ranges.ts     # IP 段管理
+│   │   ├── Import/
+│   │   │   ├── ImportService.php
+│   │   │   ├── TxtParser.php
+│   │   │   └── CsvParser.php
 │   │   │
-│   │   ├── 03-version/          # Step 3: WordPress 版本
-│   │   │   ├── detector.ts
-│   │   │   └── methods/         # 各种版本检测方法
+│   │   ├── Poc/
+│   │   │   ├── PocRunner.php
+│   │   │   ├── PocRegistry.php
+│   │   │   └── BasePoc.php
 │   │   │
-│   │   ├── 04-assets/           # Step 4: 资产解析（插件/主题）
-│   │   │   ├── parser.ts        # JSON/HTML 解析器
-│   │   │   ├── plugin-parser.ts # 插件解析
-│   │   │   └── theme-parser.ts  # 主题解析
-│   │   │
-│   │   ├── 05-plugin-version/   # Step 5: 插件版本检测
-│   │   │   ├── detector.ts
-│   │   │   └── extractors/      # 版本提取器
-│   │   │
-│   │   └── 06-theme-version/    # Step 6: 主题版本检测
-│   │       ├── detector.ts
-│   │       └── extractors/
+│   │   └── HttpClient.php       # HTTP 客户端封装
 │   │
-│   ├── vulndb/                  # 漏洞数据库
-│   │   ├── database.ts          # 数据库接口
-│   │   ├── matcher.ts           # 漏洞匹配引擎
-│   │   ├── models/              # 数据模型
-│   │   └── sync/                # 数据同步
+│   ├── Jobs/                    # 队列任务
+│   │   ├── ScanTargetJob.php
+│   │   ├── RunPocJob.php
+│   │   └── ImportFileJob.php
 │   │
-│   ├── poc/                     # POC 模块（可扩展）
-│   │   ├── loader.ts            # POC 加载器（支持热加载）
-│   │   ├── runner.ts            # POC 执行器
-│   │   ├── registry.ts          # POC 注册表
-│   │   ├── base.ts              # POC 基类
-│   │   └── modules/             # POC 模块目录
-│   │       ├── wordpress/       # WP 核心漏洞 POC
-│   │       ├── plugins/         # 插件漏洞 POC
-│   │       │   ├── elementor/
-│   │       │   ├── woocommerce/
-│   │       │   ├── contact-form-7/
-│   │       │   └── ...
-│   │       └── themes/          # 主题漏洞 POC
-│   │
-│   ├── distributed/             # 分布式模块
-│   │   ├── master.ts            # 主节点（任务调度）
-│   │   ├── worker.ts            # 工作节点（执行扫描）
-│   │   ├── queue.ts             # 任务队列（高吞吐）
-│   │   ├── batch-scheduler.ts   # 批量任务调度器
-│   │   ├── coordinator.ts       # 协调器
-│   │   └── protocol.ts          # 通信协议
-│   │
-│   ├── api/                     # API 服务
-│   │   ├── server.ts            # HTTP 服务器
-│   │   ├── routes/
-│   │   │   ├── targets.ts       # 资产管理 API
-│   │   │   ├── import.ts        # 批量导入 API
-│   │   │   ├── scan.ts          # 扫描相关 API
-│   │   │   ├── poc.ts           # POC 相关 API
-│   │   │   └── vulndb.ts        # 漏洞库 API
-│   │   └── websocket.ts         # WebSocket 实时推送
-│   │
-│   ├── cli/                     # 命令行接口
-│   │   ├── index.ts
-│   │   └── commands/
-│   │
-│   └── utils/
-│       ├── logger.ts
-│       ├── cache.ts
-│       ├── ip-utils.ts          # IP 地址工具
-│       ├── stream-utils.ts      # 流式处理工具
-│       └── config.ts
+│   └── Events/                  # 事件
+│       ├── ScanCompleted.php
+│       ├── VulnerabilityFound.php
+│       └── PocResultReady.php
 │
-├── data/
-│   ├── cloudflare/              # Cloudflare IP 段
-│   │   ├── ips-v4.txt           # IPv4 段 (定期从 CF 更新)
-│   │   └── ips-v6.txt           # IPv6 段
-│   └── vulndb/                  # 漏洞数据库
+├── config/
+│   ├── wpsan.php                # 扫描配置（并发数等）
+│   └── cloudflare.php           # CF IP 段配置
 │
-├── uploads/                     # 上传文件临时目录
-│   └── imports/                 # 导入文件
+├── database/
+│   └── migrations/              # 数据库迁移
 │
-├── poc-modules/                 # 外部 POC 模块（可扩展）
-│   └── custom/                  # 用户自定义 POC
+├── pocs/                        # POC 模块目录
+│   ├── wordpress/               # WP 核心漏洞 POC
+│   ├── plugins/                 # 插件漏洞 POC
+│   │   ├── Elementor/
+│   │   ├── WooCommerce/
+│   │   └── ...
+│   └── themes/                  # 主题漏洞 POC
+│
+├── storage/
+│   ├── app/
+│   │   ├── imports/             # 导入文件
+│   │   └── cloudflare/          # CF IP 段
+│   │       ├── ips-v4.txt
+│   │       └── ips-v6.txt
+│   └── logs/
+│
+├── routes/
+│   ├── api.php                  # API 路由
+│   └── web.php
+│
+├── resources/
+│   └── views/                   # 前端视图
 │
 ├── tests/
-├── docs/
-├── scripts/
-│   ├── update-cf-ips.ts         # 更新 Cloudflare IP 段
-│   └── ...
-├── package.json
-├── tsconfig.json
-└── docker-compose.yml           # 分布式部署配置
+├── docker-compose.yml
+├── composer.json
+└── .env
 ```
 
 ---
@@ -208,22 +190,26 @@ wpsan/
 ## 技术栈
 
 ### 核心技术
-- **语言**: TypeScript (Node.js 20+)
-- **HTTP 客户端**: undici (高性能 HTTP/1.1 & HTTP/2)
-- **数据库**: PostgreSQL (主数据库) + Redis (缓存/队列)
-- **消息队列**: BullMQ (基于 Redis)
-- **API 框架**: Fastify
-- **WebSocket**: ws 或 Socket.io
+- **语言**: PHP 8.2+
+- **框架**: Laravel 10+ 或原生 PHP
+- **HTTP 客户端**: Guzzle
+- **数据库**: MySQL 8.0+
+- **缓存/队列**: Redis
+- **消息队列**: Laravel Queue (Redis 驱动) 或 Supervisor + 自定义队列
+- **WebSocket**: Laravel Reverb 或 Swoole
 
 ### 分布式
 - **容器化**: Docker + Docker Compose
+- **进程管理**: Supervisor
 - **编排**: Kubernetes (可选)
-- **服务发现**: Consul 或 etcd (可选)
 
 ### 前端 (Web UI)
-- **框架**: Vue 3 或 React
-- **状态管理**: Pinia 或 Zustand
-- **UI 组件**: Element Plus 或 Ant Design
+- **框架**: Vue 3 + Inertia.js 或纯 Blade 模板
+- **UI 组件**: Element Plus 或 Tailwind CSS
+
+### 认证
+- **无认证**: 单用户私有部署，不需要 API 认证
+- **安全建议**: 通过防火墙/Nginx 限制访问 IP，或使用 VPN
 
 ---
 
@@ -360,168 +346,177 @@ https://example2.com
 
 #### 核心代码
 
-```typescript
-// src/targets/importer.ts
+```php
+<?php
+// app/Services/Import/ImportService.php
 
-import { createReadStream } from 'fs';
-import { createInterface } from 'readline';
-import { parse as csvParse } from 'csv-parse';
+namespace App\Services\Import;
 
-class TargetImporter {
-  private batchSize = 1000;        // 批量写入大小
-  private progressInterval = 100;  // 进度上报间隔
+use App\Models\Target;
+use App\Models\ImportJob;
+use Illuminate\Support\Facades\DB;
 
-  // 导入 TXT 文件
-  async importTxt(
-    filePath: string,
-    jobId: string,
-    groupId?: string
-  ): Promise<void> {
-    const stream = createReadStream(filePath, { encoding: 'utf-8' });
-    const rl = createInterface({ input: stream });
+class ImportService
+{
+    private int $batchSize = 1000;
 
-    let batch: string[] = [];
-    let processed = 0;
-    let valid = 0;
-    let duplicates = 0;
-    let invalid = 0;
+    /**
+     * 导入 TXT 文件
+     */
+    public function importTxt(string $filePath, string $jobId, ?string $groupId = null): void
+    {
+        $handle = fopen($filePath, 'r');
+        $batch = [];
+        $processed = 0;
+        $valid = 0;
+        $duplicates = 0;
+        $invalid = 0;
 
-    for await (const line of rl) {
-      processed++;
-      const url = this.validateUrl(line.trim());
+        while (($line = fgets($handle)) !== false) {
+            $processed++;
+            $url = $this->validateUrl(trim($line));
 
-      if (!url) {
-        invalid++;
-        continue;
-      }
+            if (!$url) {
+                $invalid++;
+                continue;
+            }
 
-      batch.push(url);
+            $batch[] = $url;
 
-      // 批量写入
-      if (batch.length >= this.batchSize) {
-        const result = await this.batchInsert(batch, groupId);
-        valid += result.inserted;
-        duplicates += result.duplicates;
-        batch = [];
+            if (count($batch) >= $this->batchSize) {
+                $result = $this->batchInsert($batch, $groupId);
+                $valid += $result['inserted'];
+                $duplicates += $result['duplicates'];
+                $batch = [];
 
-        // 上报进度
-        if (processed % this.progressInterval === 0) {
-          await this.reportProgress(jobId, { processed, valid, duplicates, invalid });
+                $this->reportProgress($jobId, compact('processed', 'valid', 'duplicates', 'invalid'));
+            }
         }
-      }
+
+        fclose($handle);
+
+        // 处理剩余
+        if (!empty($batch)) {
+            $result = $this->batchInsert($batch, $groupId);
+            $valid += $result['inserted'];
+            $duplicates += $result['duplicates'];
+        }
+
+        $this->completeJob($jobId, compact('processed', 'valid', 'duplicates', 'invalid'));
     }
 
-    // 处理剩余
-    if (batch.length > 0) {
-      const result = await this.batchInsert(batch, groupId);
-      valid += result.inserted;
-      duplicates += result.duplicates;
+    /**
+     * 导入 CSV 文件
+     */
+    public function importCsv(string $filePath, string $jobId, ?string $groupId = null): void
+    {
+        $handle = fopen($filePath, 'r');
+        $headers = fgetcsv($handle);
+        $batch = [];
+        $processed = 0;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $processed++;
+            $data = array_combine($headers, $row);
+
+            $url = $this->extractUrlFromRow($data);
+            if (!$url) continue;
+
+            $validUrl = $this->validateUrl($url);
+            if (!$validUrl) continue;
+
+            $batch[] = [
+                'url' => $validUrl,
+                'name' => $data['name'] ?? $data['title'] ?? null,
+                'tags' => $this->parseTags($data['tags'] ?? null),
+            ];
+
+            if (count($batch) >= $this->batchSize) {
+                $this->batchInsertWithMeta($batch, $groupId);
+                $batch = [];
+                $this->reportProgress($jobId, ['processed' => $processed]);
+            }
+        }
+
+        fclose($handle);
+
+        if (!empty($batch)) {
+            $this->batchInsertWithMeta($batch, $groupId);
+        }
     }
 
-    await this.completeJob(jobId, { processed, valid, duplicates, invalid });
-  }
+    /**
+     * URL 验证（必须带协议）
+     */
+    private function validateUrl(string $url): ?string
+    {
+        if (empty($url)) return null;
 
-  // 导入 CSV 文件
-  async importCsv(
-    filePath: string,
-    jobId: string,
-    groupId?: string
-  ): Promise<void> {
-    const stream = createReadStream(filePath);
-    const parser = csvParse({
-      columns: true,              // 第一行作为列名
-      skip_empty_lines: true,
-      relaxColumnCount: true,
-    });
+        // 必须以 http:// 或 https:// 开头
+        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            return null;
+        }
 
-    let batch: { url: string; name?: string; tags?: string[] }[] = [];
-    let processed = 0;
+        $parsed = parse_url($url);
+        if (!$parsed || !isset($parsed['host'])) {
+            return null;
+        }
 
-    stream.pipe(parser);
+        // 规范化 URL
+        $normalized = $parsed['scheme'] . '://' . $parsed['host'];
+        if (isset($parsed['path']) && $parsed['path'] !== '/') {
+            $normalized .= rtrim($parsed['path'], '/');
+        }
 
-    for await (const row of parser) {
-      processed++;
-
-      // 自动检测 URL 列
-      const url = this.extractUrlFromRow(row);
-      if (!url) continue;
-
-      const validUrl = this.validateUrl(url);
-      if (!validUrl) continue;  // 跳过无协议的 URL
-
-      batch.push({
-        url: validUrl,
-        name: row.name || row.title || row.域名,
-        tags: this.parseTags(row.tags || row.标签),
-      });
-
-      if (batch.length >= this.batchSize) {
-        await this.batchInsertWithMeta(batch, groupId);
-        batch = [];
-        await this.reportProgress(jobId, { processed });
-      }
+        return $normalized;
     }
 
-    if (batch.length > 0) {
-      await this.batchInsertWithMeta(batch, groupId);
+    /**
+     * 批量插入（带去重）
+     */
+    private function batchInsert(array $urls, ?string $groupId): array
+    {
+        $inserted = 0;
+
+        foreach ($urls as $url) {
+            $domain = parse_url($url, PHP_URL_HOST);
+
+            // INSERT IGNORE 实现去重
+            $result = DB::insert(
+                'INSERT IGNORE INTO targets (url, domain, group_id, status, created_at)
+                 VALUES (?, ?, ?, "pending", NOW())',
+                [$url, $domain, $groupId]
+            );
+
+            if ($result) $inserted++;
+        }
+
+        return [
+            'inserted' => $inserted,
+            'duplicates' => count($urls) - $inserted,
+        ];
     }
-  }
 
-  // URL 验证（必须带协议）
-  private validateUrl(url: string): string | null {
-    if (!url) return null;
+    /**
+     * 从 CSV 行提取 URL
+     */
+    private function extractUrlFromRow(array $row): ?string
+    {
+        $urlColumns = ['url', 'URL', 'domain', 'site', 'website', '网址', '域名'];
 
-    // 必须以 http:// 或 https:// 开头，不自动补充
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      return null;  // 无效，缺少协议
+        foreach ($urlColumns as $col) {
+            if (!empty($row[$col])) {
+                return $row[$col];
+            }
+        }
+
+        // 只有一列则使用第一列
+        if (count($row) === 1) {
+            return array_values($row)[0];
+        }
+
+        return null;
     }
-
-    try {
-      const parsed = new URL(url);
-      // 返回规范化的 URL（去除末尾斜杠等）
-      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.replace(/\/$/, '');
-    } catch {
-      return null;
-    }
-  }
-
-  // 批量插入（带去重）
-  private async batchInsert(
-    urls: string[],
-    groupId?: string
-  ): Promise<{ inserted: number; duplicates: number }> {
-    // 使用 ON CONFLICT 实现数据库级别去重
-    const result = await db.query(`
-      INSERT INTO targets (id, url, domain, group_id, status, created_at)
-      SELECT
-        gen_random_uuid(),
-        unnest($1::text[]),
-        unnest($2::text[]),
-        $3,
-        'pending',
-        NOW()
-      ON CONFLICT (url) DO NOTHING
-      RETURNING id
-    `, [urls, urls.map(u => new URL(u).host), groupId]);
-
-    return {
-      inserted: result.rowCount,
-      duplicates: urls.length - result.rowCount,
-    };
-  }
-
-  // 从 CSV 行中提取 URL
-  private extractUrlFromRow(row: Record<string, string>): string | null {
-    // 尝试常见列名
-    const urlColumns = ['url', 'URL', 'domain', 'site', 'website', '网址', '域名'];
-    for (const col of urlColumns) {
-      if (row[col]) return row[col];
-    }
-    // 如果只有一列，使用第一列
-    const keys = Object.keys(row);
-    if (keys.length === 1) return row[keys[0]];
-    return null;
-  }
 }
 ```
 
@@ -600,83 +595,171 @@ ws.subscribe('import:import_abc123');
 }
 ```
 
-### PostgreSQL Schema（大规模优化）
+### MySQL Schema（大规模优化）
 
 ```sql
 -- 目标资产表（优化大规模数据）
 CREATE TABLE targets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   url VARCHAR(2048) NOT NULL,
   domain VARCHAR(255) NOT NULL,
-  group_id UUID REFERENCES target_groups(id) ON DELETE SET NULL,
-  tags TEXT[],
+  group_id BIGINT UNSIGNED NULL,
+  tags JSON,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
 
   -- 最近扫描摘要（避免 JOIN）
-  last_scan_id UUID,
-  last_scan_at TIMESTAMP,
-  is_wordpress BOOLEAN,
-  wp_version VARCHAR(20),
-  cloudflare BOOLEAN,
-  vuln_count INTEGER DEFAULT 0,
+  last_scan_at DATETIME NULL,
+  is_wordpress TINYINT(1) DEFAULT NULL,
+  wp_version VARCHAR(20) DEFAULT NULL,
+  cloudflare TINYINT(1) DEFAULT NULL,
+  cloudflare_ip VARCHAR(45) DEFAULT NULL,
+  vuln_count INT UNSIGNED DEFAULT 0,
 
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW(),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   -- 唯一约束用于去重
-  CONSTRAINT targets_url_unique UNIQUE (url)
-);
+  UNIQUE KEY uk_targets_url (url(500)),
 
--- 索引优化
-CREATE INDEX idx_targets_domain ON targets (domain);
-CREATE INDEX idx_targets_group ON targets (group_id);
-CREATE INDEX idx_targets_status ON targets (status);
-CREATE INDEX idx_targets_created ON targets (created_at DESC);
-CREATE INDEX idx_targets_is_wp ON targets (is_wordpress) WHERE is_wordpress = true;
-CREATE INDEX idx_targets_vuln ON targets (vuln_count DESC) WHERE vuln_count > 0;
+  -- 索引优化
+  KEY idx_targets_domain (domain),
+  KEY idx_targets_group (group_id),
+  KEY idx_targets_status (status),
+  KEY idx_targets_created (created_at DESC),
+  KEY idx_targets_is_wp (is_wordpress),
+  KEY idx_targets_vuln (vuln_count DESC),
 
--- 分区表（按创建时间，可选）
--- CREATE TABLE targets_2024 PARTITION OF targets
---   FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+  FOREIGN KEY (group_id) REFERENCES target_groups(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 分组表
 CREATE TABLE target_groups (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   description TEXT,
-  target_count INTEGER DEFAULT 0,  -- 缓存计数
-  created_at TIMESTAMP DEFAULT NOW()
-);
+  target_count INT UNSIGNED DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 导入任务表
 CREATE TABLE import_jobs (
   id VARCHAR(50) PRIMARY KEY,
   filename VARCHAR(255) NOT NULL,
   file_type VARCHAR(10) NOT NULL,
-  file_size BIGINT NOT NULL,
+  file_size BIGINT UNSIGNED NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
 
   -- 进度
-  total_rows INTEGER DEFAULT 0,
-  processed_rows INTEGER DEFAULT 0,
-  valid_count INTEGER DEFAULT 0,
-  duplicate_count INTEGER DEFAULT 0,
-  invalid_count INTEGER DEFAULT 0,
+  total_rows INT UNSIGNED DEFAULT 0,
+  processed_rows INT UNSIGNED DEFAULT 0,
+  valid_count INT UNSIGNED DEFAULT 0,
+  duplicate_count INT UNSIGNED DEFAULT 0,
+  invalid_count INT UNSIGNED DEFAULT 0,
 
-  group_id UUID REFERENCES target_groups(id),
+  group_id BIGINT UNSIGNED NULL,
   error TEXT,
 
-  created_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP
-);
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME NULL,
+
+  FOREIGN KEY (group_id) REFERENCES target_groups(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 扫描发现的插件
+CREATE TABLE scan_plugins (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  target_id BIGINT UNSIGNED NOT NULL,
+  slug VARCHAR(100) NOT NULL,
+  name VARCHAR(200),
+  version VARCHAR(20),
+  version_source VARCHAR(50),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  KEY idx_scan_plugins_target (target_id),
+  KEY idx_scan_plugins_slug (slug),
+  FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 扫描发现的主题
+CREATE TABLE scan_themes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  target_id BIGINT UNSIGNED NOT NULL,
+  slug VARCHAR(100) NOT NULL,
+  name VARCHAR(200),
+  version VARCHAR(20),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  KEY idx_scan_themes_target (target_id),
+  FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 漏洞库（自维护）
+CREATE TABLE vulnerabilities (
+  id VARCHAR(50) PRIMARY KEY,
+  cve VARCHAR(20),
+  title VARCHAR(500) NOT NULL,
+  description TEXT,
+
+  component_type VARCHAR(20) NOT NULL,  -- core, plugin, theme
+  component_slug VARCHAR(100),
+  affected_versions VARCHAR(100),        -- semver range, 如 "< 3.5.0"
+  fixed_version VARCHAR(20),
+
+  severity VARCHAR(20) NOT NULL,         -- critical, high, medium, low
+  cvss_score DECIMAL(3, 1),
+
+  poc_id VARCHAR(100),                   -- 关联的 POC ID
+  reference_urls JSON,                   -- 参考链接
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  KEY idx_vulns_component (component_type, component_slug),
+  KEY idx_vulns_severity (severity)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- POC 执行记录
+CREATE TABLE poc_executions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  target_id BIGINT UNSIGNED NOT NULL,
+  poc_id VARCHAR(100) NOT NULL,
+  job_id VARCHAR(50),                    -- 批量任务 ID
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  vulnerable TINYINT(1),
+  evidence TEXT,
+  executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  KEY idx_poc_target (target_id),
+  KEY idx_poc_job (job_id),
+  FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 探针状态表
+CREATE TABLE probes (
+  id VARCHAR(100) PRIMARY KEY,
+  ip VARCHAR(45),
+  concurrency INT UNSIGNED DEFAULT 10,
+  status VARCHAR(20) DEFAULT 'offline',
+  last_heartbeat DATETIME,
+  tasks_completed INT UNSIGNED DEFAULT 0,
+  registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 ### 性能优化策略
 
 ```typescript
-// 50万资产处理策略
+// 扫描配置
 
-const PERFORMANCE_CONFIG = {
+const SCAN_CONFIG = {
+  // 并发控制（队列模式，非同时扫描）
+  concurrency: {
+    default: 10,                  // 默认并发数
+    min: 1,
+    max: 100,
+    configurable: true,           // 用户可配置
+  },
+
   // 导入优化
   import: {
     batchSize: 1000,              // 每批插入 1000 条
@@ -688,7 +771,8 @@ const PERFORMANCE_CONFIG = {
   scan: {
     batchSize: 10000,             // 每次从 DB 取 10000 个目标
     queueBatchSize: 100,          // 每次入队 100 个任务
-    maxConcurrentScans: 1000,     // 最大并发扫描数
+    skipScanned: true,            // 跳过已扫描的（避免重复）
+    keepOnlyLastResult: true,     // 只保留最后一次扫描结果
   },
 
   // 查询优化
@@ -1315,147 +1399,532 @@ export default class ElementorRcePoc extends BasePoc {
 }
 ```
 
-### 7. POC 关联与触发
+### 7. POC 执行策略
+
+**重要设计决策：**
+- POC **不自动执行**，必须用户点击触发
+- POC 按**插件维度**执行：选择某个插件漏洞 → 批量扫描所有包含该插件的资产
+- 漏洞库**自己维护**，不依赖外部数据源
 
 ```typescript
-// 扫描结果数据结构
+// POC 批量执行接口
 
-interface IScanResult {
-  target: string;
-  timestamp: Date;
-
-  // 各阶段结果
-  wordpress: IWordPressDetectionResult;
-  cloudflare: ICloudflareDetectionResult;
-  version: IVersionDetectionResult;
-  plugins: IPluginWithVersion[];
-  themes: IThemeWithVersion[];
-
-  // 漏洞匹配结果（包含关联的 POC）
-  vulnerabilities: IVulnerabilityMatch[];
+interface IPocBatchRunRequest {
+  pocId: string;                      // 要执行的 POC
+  targetIds?: string[];               // 指定目标（可选）
+  groupId?: string;                   // 按分组执行（可选）
+  pluginSlug: string;                 // 插件 slug
+  pluginVersion?: string;             // 版本范围过滤（可选）
 }
 
-interface IVulnerabilityMatch {
-  vulnerability: IVulnerability;      // 漏洞信息
-  affectedComponent: {
-    type: 'core' | 'plugin' | 'theme';
-    slug?: string;
-    version: string;
-  };
-  pocs: IPocInfo[];                   // 关联的 POC 列表
+// 示例：对所有安装了 elementor 插件的资产执行某个 POC
+// POST /api/v1/poc/batch-run
+{
+  "pocId": "elementor-rce-2024-xxxx",
+  "pluginSlug": "elementor"
+  // 不指定 targetIds 则扫描所有匹配的资产
 }
 
-interface IPocInfo {
+// 执行流程
+class PocBatchRunner {
+  async run(request: IPocBatchRunRequest): Promise<string> {
+    // 1. 查找所有包含该插件的资产
+    const targets = await this.findTargetsWithPlugin(
+      request.pluginSlug,
+      request.pluginVersion,
+      request.targetIds,
+      request.groupId
+    );
+
+    // 2. 创建批量任务
+    const jobId = generateJobId();
+
+    // 3. 入队（按配置的并发数执行）
+    for (const target of targets) {
+      await pocQueue.add({
+        jobId,
+        pocId: request.pocId,
+        targetId: target.id,
+        targetUrl: target.url,
+      });
+    }
+
+    return jobId;
+  }
+
+  // 查找包含指定插件的资产
+  private async findTargetsWithPlugin(
+    pluginSlug: string,
+    version?: string,
+    targetIds?: string[],
+    groupId?: string
+  ): Promise<ITarget[]> {
+    let query = `
+      SELECT DISTINCT t.* FROM targets t
+      JOIN scan_plugins sp ON t.last_scan_id = sp.scan_id
+      WHERE sp.slug = $1
+    `;
+    const params: any[] = [pluginSlug];
+
+    if (version) {
+      // 版本范围过滤（如 < 3.5.0）
+      query += ` AND sp.version IS NOT NULL`;
+    }
+    if (targetIds?.length) {
+      query += ` AND t.id = ANY($${params.length + 1})`;
+      params.push(targetIds);
+    }
+    if (groupId) {
+      query += ` AND t.group_id = $${params.length + 1}`;
+      params.push(groupId);
+    }
+
+    return db.query(query, params);
+  }
+}
+
+// POC 执行结果
+interface IPocExecutionResult {
+  targetId: string;
+  targetUrl: string;
+  pocId: string;
+  vulnerable: boolean;
+  evidence?: string;
+  executedAt: Date;
+}
+
+// 发现漏洞时提示（WebSocket）
+ws.emit('poc:vulnerable', {
+  targetUrl: 'https://example.com',
+  pocId: 'elementor-rce-2024-xxxx',
+  pluginSlug: 'elementor',
+  severity: 'critical',
+  evidence: '...'
+});
+```
+
+### 8. 漏洞库（自维护）
+
+漏洞数据由用户自己添加和维护，不依赖外部 API。
+
+```typescript
+// 漏洞数据模型
+interface IVulnerability {
   id: string;
-  name: string;
-  severity: string;
-  canRun: boolean;                    // 是否可执行（无条件）
+  title: string;
+  description: string;
+
+  // 影响组件
+  componentType: 'core' | 'plugin' | 'theme';
+  componentSlug: string;
+  affectedVersions: string;           // semver range, 如 "< 3.5.0"
+  fixedVersion?: string;
+
+  // 严重性
+  severity: 'critical' | 'high' | 'medium' | 'low';
+
+  // 关联 POC
+  pocId?: string;
+
+  // 参考信息
+  cve?: string;
+  references?: string[];
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// API: 执行 POC
-// POST /api/v1/scans/:scanId/pocs/:pocId/run
-// Response: IPocResult
+// API: 漏洞管理（自维护）
+POST   /api/v1/vulns                  // 添加漏洞
+GET    /api/v1/vulns                  // 列表
+GET    /api/v1/vulns/:id              // 详情
+PUT    /api/v1/vulns/:id              // 更新
+DELETE /api/v1/vulns/:id              // 删除
+
+// CLI: 漏洞管理
+wpsan vuln add --title="..." --plugin=elementor --versions="< 3.5.0"
+wpsan vuln list
+wpsan vuln import vulns.json          // 批量导入
 ```
 
 ---
 
-## 分布式架构设计
+## 分布式架构设计（探针模式）
+
+采用**探针模式**部署，无需 Docker，每台服务器独立部署程序，数据统一上报到主服务器。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           WPSan 分布式架构                                   │
+│                        WPSan 探针模式分布式架构                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
                               ┌─────────────┐
                               │   Web UI    │
-                              │  (Vue/React)│
+                              │ (主服务器)   │
                               └──────┬──────┘
                                      │
                                      ▼
-                              ┌─────────────┐
-                              │  API Server │
-                              │  (Fastify)  │
-                              └──────┬──────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                      │
-              ▼                      ▼                      ▼
-       ┌─────────────┐        ┌─────────────┐        ┌─────────────┐
-       │   Master    │◄──────►│    Redis    │◄──────►│  PostgreSQL │
-       │  (调度器)   │        │ (队列/缓存)  │        │  (持久化)   │
-       └──────┬──────┘        └─────────────┘        └─────────────┘
-              │
-              │ 任务分发
-    ┌─────────┼─────────┬─────────────┐
-    │         │         │             │
-    ▼         ▼         ▼             ▼
-┌────────┐┌────────┐┌────────┐   ┌────────┐
-│Worker 1││Worker 2││Worker 3│...│Worker N│
-│  扫描   ││  扫描   ││  扫描   │   │  扫描   │
-└────────┘└────────┘└────────┘   └────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              主服务器 (Master)                              │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                    │
+│  │  API Server │    │    Redis    │    │    MySQL    │                    │
+│  │   (PHP)     │    │  (队列/缓存) │    │  (主数据库)  │                    │
+│  └─────────────┘    └─────────────┘    └─────────────┘                    │
+└────────────────────────────────────────────────────────────────────────────┘
+          ▲                     ▲                     ▲
+          │                     │                     │
+          │     HTTP/WebSocket  │   Redis 连接         │   MySQL 连接
+          │                     │                     │
+    ┌─────┴─────┬───────────────┴───────────────┬─────┴─────┐
+    │           │                               │           │
+    ▼           ▼                               ▼           ▼
+┌────────┐  ┌────────┐                     ┌────────┐  ┌────────┐
+│ 探针 1  │  │ 探针 2  │        ...          │ 探针 N  │  │ 探针 N+1│
+│ 北京    │  │ 上海    │                     │ 香港    │  │ 美国    │
+└────────┘  └────────┘                     └────────┘  └────────┘
+   独立部署    独立部署                        独立部署    独立部署
 ```
+
+### 探针模式特点
+
+| 特点 | 说明 |
+|------|------|
+| **独立部署** | 每台服务器运行独立的探针程序，无需 Docker |
+| **数据集中** | 所有扫描结果直接写入主服务器 MySQL |
+| **队列共享** | 探针从主服务器 Redis 拉取任务 |
+| **易于扩展** | 新增节点只需部署探针程序并配置连接信息 |
+| **地理分布** | 可部署在不同地区，提高扫描覆盖 |
 
 ### 组件职责
 
-| 组件 | 职责 |
-|------|------|
-| **Web UI** | 用户交互界面，提交扫描任务，查看结果，点击运行 POC |
-| **API Server** | RESTful API，处理请求，返回结果 |
-| **Master** | 任务调度，负载均衡，监控 Worker 状态 |
-| **Worker** | 执行实际扫描任务，运行 POC |
-| **Redis** | 任务队列（BullMQ），结果缓存，实时状态 |
-| **PostgreSQL** | 持久化存储（扫描结果、漏洞库、用户数据） |
+| 组件 | 部署位置 | 职责 |
+|------|----------|------|
+| **Web UI** | 主服务器 | 用户界面，任务管理，结果展示 |
+| **API Server** | 主服务器 | RESTful API，WebSocket 推送 |
+| **MySQL** | 主服务器 | 所有数据持久化（资产、扫描结果、漏洞库） |
+| **Redis** | 主服务器 | 任务队列、缓存、实时状态 |
+| **探针 (Probe)** | 分布式部署 | 拉取任务、执行扫描、上报结果 |
 
-### 任务队列设计
+### 探针程序设计
 
-```typescript
-// src/distributed/queue.ts
+```php
+<?php
+// probe/ProbeWorker.php
 
-import { Queue, Worker, Job } from 'bullmq';
+namespace WPSan\Probe;
 
-// 扫描任务队列
-const scanQueue = new Queue('scan-tasks', { connection: redis });
+use Predis\Client as Redis;
+use PDO;
 
-// 任务类型
-interface IScanJob {
-  type: 'full_scan' | 'poc_verify';
-  target: string;
-  options: {
-    pocId?: string;           // POC 验证时的 POC ID
-  };
-  priority: number;           // 优先级
-  userId: string;
+class ProbeWorker
+{
+    private Redis $redis;
+    private PDO $db;
+    private string $probeId;
+    private int $concurrency;
+
+    public function __construct()
+    {
+        // 从配置文件读取主服务器连接信息
+        $config = require __DIR__ . '/config.php';
+
+        $this->probeId = $config['probe_id'] ?? gethostname();
+        $this->concurrency = $config['concurrency'] ?? 10;
+
+        // 连接主服务器 Redis
+        $this->redis = new Redis([
+            'scheme' => 'tcp',
+            'host'   => $config['redis_host'],
+            'port'   => $config['redis_port'],
+            'password' => $config['redis_password'] ?? null,
+        ]);
+
+        // 连接主服务器 MySQL
+        $this->db = new PDO(
+            "mysql:host={$config['mysql_host']};dbname={$config['mysql_database']};charset=utf8mb4",
+            $config['mysql_user'],
+            $config['mysql_password'],
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+    }
+
+    /**
+     * 启动探针
+     */
+    public function run(): void
+    {
+        echo "[Probe:{$this->probeId}] Started with concurrency: {$this->concurrency}\n";
+
+        // 注册探针
+        $this->registerProbe();
+
+        // 心跳进程
+        $this->startHeartbeat();
+
+        // 工作循环
+        while (true) {
+            // 从队列拉取任务
+            $task = $this->redis->brpop('wpsan:scan:queue', 5);
+
+            if ($task) {
+                $this->processTask(json_decode($task[1], true));
+            }
+
+            // 检查 POC 任务队列
+            $pocTask = $this->redis->brpop('wpsan:poc:queue', 1);
+            if ($pocTask) {
+                $this->processPocTask(json_decode($pocTask[1], true));
+            }
+        }
+    }
+
+    /**
+     * 注册探针到主服务器
+     */
+    private function registerProbe(): void
+    {
+        $this->redis->hset('wpsan:probes', $this->probeId, json_encode([
+            'id' => $this->probeId,
+            'ip' => $this->getLocalIp(),
+            'concurrency' => $this->concurrency,
+            'status' => 'online',
+            'registered_at' => date('Y-m-d H:i:s'),
+        ]));
+    }
+
+    /**
+     * 心跳上报
+     */
+    private function startHeartbeat(): void
+    {
+        // 使用 pcntl_fork 或独立进程
+        $this->redis->hset('wpsan:probes:heartbeat', $this->probeId, time());
+    }
+
+    /**
+     * 处理扫描任务
+     */
+    private function processTask(array $task): void
+    {
+        $targetId = $task['target_id'];
+        $targetUrl = $task['target_url'];
+
+        echo "[Probe:{$this->probeId}] Scanning: {$targetUrl}\n";
+
+        try {
+            // 更新状态为扫描中
+            $this->updateTargetStatus($targetId, 'scanning');
+
+            // 执行扫描流程
+            $scanner = new ScannerService();
+            $result = $scanner->scan($targetUrl);
+
+            // 直接写入主服务器数据库
+            $this->saveScanResult($targetId, $result);
+
+            // 更新状态为完成
+            $this->updateTargetStatus($targetId, 'completed');
+
+            // 发现漏洞时通知
+            if (!empty($result['vulnerabilities'])) {
+                $this->notifyVulnerabilities($targetId, $targetUrl, $result['vulnerabilities']);
+            }
+
+        } catch (\Exception $e) {
+            $this->updateTargetStatus($targetId, 'failed');
+            $this->logError($targetId, $e->getMessage());
+        }
+    }
+
+    /**
+     * 保存扫描结果到主数据库
+     */
+    private function saveScanResult(int $targetId, array $result): void
+    {
+        // 删除旧的扫描结果（只保留最后一次）
+        $this->db->prepare('DELETE FROM scan_plugins WHERE target_id = ?')->execute([$targetId]);
+        $this->db->prepare('DELETE FROM scan_themes WHERE target_id = ?')->execute([$targetId]);
+
+        // 更新目标摘要
+        $stmt = $this->db->prepare('
+            UPDATE targets SET
+                is_wordpress = ?,
+                wp_version = ?,
+                cloudflare = ?,
+                cloudflare_ip = ?,
+                vuln_count = ?,
+                last_scan_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ?
+        ');
+        $stmt->execute([
+            $result['is_wordpress'] ? 1 : 0,
+            $result['wp_version'],
+            $result['cloudflare']['detected'] ? 1 : 0,
+            $result['cloudflare']['ip'] ?? null,
+            count($result['vulnerabilities'] ?? []),
+            $targetId,
+        ]);
+
+        // 插入插件信息
+        foreach ($result['plugins'] ?? [] as $plugin) {
+            $stmt = $this->db->prepare('
+                INSERT INTO scan_plugins (target_id, slug, name, version, version_source, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            ');
+            $stmt->execute([
+                $targetId,
+                $plugin['slug'],
+                $plugin['name'] ?? null,
+                $plugin['version'] ?? null,
+                $plugin['version_source'] ?? null,
+            ]);
+        }
+
+        // 插入主题信息
+        foreach ($result['themes'] ?? [] as $theme) {
+            $stmt = $this->db->prepare('
+                INSERT INTO scan_themes (target_id, slug, name, version, created_at)
+                VALUES (?, ?, ?, ?, NOW())
+            ');
+            $stmt->execute([
+                $targetId,
+                $theme['slug'],
+                $theme['name'] ?? null,
+                $theme['version'] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * 通知发现的漏洞
+     */
+    private function notifyVulnerabilities(int $targetId, string $url, array $vulns): void
+    {
+        foreach ($vulns as $vuln) {
+            $this->redis->publish('wpsan:vulnerabilities', json_encode([
+                'target_id' => $targetId,
+                'target_url' => $url,
+                'probe_id' => $this->probeId,
+                'vulnerability' => $vuln,
+                'found_at' => date('Y-m-d H:i:s'),
+            ]));
+        }
+    }
+
+    private function getLocalIp(): string
+    {
+        return gethostbyname(gethostname());
+    }
 }
 
-// Worker 处理任务
-const worker = new Worker('scan-tasks', async (job: Job<IScanJob>) => {
-  const { type, target, options } = job.data;
-
-  switch (type) {
-    case 'full_scan':
-      return await runFullScan(target, options, job);
-    case 'poc_verify':
-      return await runPocVerification(target, options);
-  }
-}, { connection: redis, concurrency: 5 });
-
-// 任务进度上报
-async function runFullScan(target: string, options: any, job: Job) {
-  await job.updateProgress({ stage: 'wordpress', status: 'running' });
-  const wpResult = await wordpressDetector.detect(target);
-
-  await job.updateProgress({ stage: 'cloudflare', status: 'running' });
-  const cfResult = await cloudflareDetector.detect(target);
-
-  // ... 继续执行其他阶段
-}
+// 启动探针
+$worker = new ProbeWorker();
+$worker->run();
 ```
 
-### Worker 扩展
+### 探针配置文件
+
+```php
+<?php
+// probe/config.php
+
+return [
+    // 探针标识（唯一）
+    'probe_id' => env('PROBE_ID', 'probe-' . gethostname()),
+
+    // 并发数
+    'concurrency' => (int) env('PROBE_CONCURRENCY', 10),
+
+    // 主服务器 Redis
+    'redis_host' => env('MASTER_REDIS_HOST', '主服务器IP'),
+    'redis_port' => (int) env('MASTER_REDIS_PORT', 6379),
+    'redis_password' => env('MASTER_REDIS_PASSWORD', null),
+
+    // 主服务器 MySQL
+    'mysql_host' => env('MASTER_MYSQL_HOST', '主服务器IP'),
+    'mysql_port' => (int) env('MASTER_MYSQL_PORT', 3306),
+    'mysql_database' => env('MASTER_MYSQL_DATABASE', 'wpsan'),
+    'mysql_user' => env('MASTER_MYSQL_USER', 'wpsan'),
+    'mysql_password' => env('MASTER_MYSQL_PASSWORD', ''),
+];
+```
+
+### 探针部署步骤
 
 ```bash
-# 手动扩展 Worker 数量
-docker-compose up -d --scale worker=10
+# 1. 在探针服务器上克隆代码
+git clone https://github.com/your-repo/wpsan.git
+cd wpsan/probe
+
+# 2. 安装依赖
+composer install
+
+# 3. 配置连接信息
+cp .env.example .env
+vim .env
+# 设置 MASTER_REDIS_HOST, MASTER_MYSQL_HOST 等
+
+# 4. 启动探针
+php probe.php
+
+# 5. 使用 Supervisor 守护进程（推荐）
+sudo cp wpsan-probe.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start wpsan-probe
+```
+
+### Supervisor 配置
+
+```ini
+; /etc/supervisor/conf.d/wpsan-probe.conf
+
+[program:wpsan-probe]
+command=php /opt/wpsan/probe/probe.php
+directory=/opt/wpsan/probe
+user=www-data
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/wpsan-probe.err.log
+stdout_logfile=/var/log/wpsan-probe.out.log
+environment=PROBE_ID="probe-%(host_node_name)s",PROBE_CONCURRENCY="10"
+```
+
+### 探针管理 API
+
+```php
+// 主服务器 API
+
+// 获取所有探针状态
+GET /api/v1/probes
+// Response:
+{
+    "probes": [
+        {
+            "id": "probe-beijing-01",
+            "ip": "192.168.1.100",
+            "status": "online",
+            "concurrency": 10,
+            "last_heartbeat": "2024-01-15 10:30:00",
+            "tasks_completed": 1523
+        },
+        {
+            "id": "probe-shanghai-01",
+            "ip": "192.168.2.100",
+            "status": "online",
+            "concurrency": 20,
+            "last_heartbeat": "2024-01-15 10:30:05",
+            "tasks_completed": 2341
+        }
+    ]
+}
+
+// 向指定探针分配任务（可选，默认自动分配）
+POST /api/v1/probes/{probeId}/tasks
+{
+    "target_ids": [1, 2, 3]
+}
 ```
 
 ---
@@ -1508,165 +1977,137 @@ ws.emit('poc:result', { pocId: '...', vulnerable: true, evidence: '...' });
 
 ---
 
-## 数据模型
+## 主服务器部署
 
-### PostgreSQL Schema
+### 系统要求
 
-```sql
--- 扫描记录
-CREATE TABLE scans (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  target VARCHAR(500) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending, running, completed, failed
+- PHP 8.2+
+- MySQL 8.0+
+- Redis 6.0+
+- Composer 2.x
+- Nginx/Apache
 
-  -- 检测结果
-  is_wordpress BOOLEAN,
-  wp_version VARCHAR(20),
-  cloudflare_detected BOOLEAN,
-  cloudflare_ip VARCHAR(45),
+### 部署步骤
 
-  -- 时间戳
-  created_at TIMESTAMP DEFAULT NOW(),
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
+```bash
+# 1. 克隆代码
+git clone https://github.com/your-repo/wpsan.git
+cd wpsan
 
-  -- 关联
-  user_id UUID REFERENCES users(id)
-);
+# 2. 安装 PHP 依赖
+composer install --optimize-autoloader --no-dev
 
--- 扫描发现的插件
-CREATE TABLE scan_plugins (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
-  slug VARCHAR(100) NOT NULL,
-  name VARCHAR(200),
-  version VARCHAR(20),
-  version_source VARCHAR(50)
-);
+# 3. 配置环境变量
+cp .env.example .env
+vim .env
 
--- 扫描发现的主题
-CREATE TABLE scan_themes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
-  slug VARCHAR(100) NOT NULL,
-  name VARCHAR(200),
-  version VARCHAR(20)
-);
+# 4. 数据库迁移
+php artisan migrate
 
--- 扫描匹配的漏洞
-CREATE TABLE scan_vulnerabilities (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
-  vuln_id VARCHAR(50) NOT NULL,  -- 关联漏洞库
-  component_type VARCHAR(20) NOT NULL,  -- core, plugin, theme
-  component_slug VARCHAR(100),
-  component_version VARCHAR(20)
-);
+# 5. 生成应用密钥
+php artisan key:generate
 
--- POC 执行记录
-CREATE TABLE poc_executions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
-  poc_id VARCHAR(100) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'pending',
-  vulnerable BOOLEAN,
-  evidence TEXT,
-  executed_at TIMESTAMP DEFAULT NOW()
-);
+# 6. 更新 Cloudflare IP 段
+php artisan wpsan:update-cf-ips
 
--- 漏洞库
-CREATE TABLE vulnerabilities (
-  id VARCHAR(50) PRIMARY KEY,
-  cve VARCHAR(20),
-  title VARCHAR(500) NOT NULL,
-  description TEXT,
+# 7. 启动队列处理器
+php artisan queue:work redis --queue=scan,poc --tries=3
 
-  component_type VARCHAR(20) NOT NULL,
-  component_slug VARCHAR(100),
-  affected_versions VARCHAR(100),  -- semver range
-  fixed_version VARCHAR(20),
-
-  severity VARCHAR(20) NOT NULL,
-  cvss_score DECIMAL(3, 1),
-
-  poc_ids TEXT[],  -- 关联的 POC ID 列表
-  references TEXT[],
-
-  published_at TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- 索引
-CREATE INDEX idx_scans_user ON scans(user_id);
-CREATE INDEX idx_scans_status ON scans(status);
-CREATE INDEX idx_scan_plugins_scan ON scan_plugins(scan_id);
-CREATE INDEX idx_vulnerabilities_component ON vulnerabilities(component_type, component_slug);
+# 8. 配置 Nginx
+sudo cp nginx.conf /etc/nginx/sites-available/wpsan
+sudo ln -s /etc/nginx/sites-available/wpsan /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
----
+### 环境变量配置
 
-## Docker 部署
+```bash
+# .env
 
-```yaml
-# docker-compose.yml
+APP_NAME=WPSan
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://your-domain.com
 
-version: '3.8'
+# 数据库
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=wpsan
+DB_USERNAME=wpsan
+DB_PASSWORD=your-db-password
 
-services:
-  # API 服务
-  api:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/wpsan
-      - REDIS_URL=redis://redis:6379
-      - NODE_ENV=production
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./data:/app/data  # Cloudflare IP 段等数据
+# Redis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
 
-  # Master 调度器
-  master:
-    build: .
-    command: npm run start:master
-    environment:
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
+# 队列
+QUEUE_CONNECTION=redis
 
-  # Worker (可扩展)
-  worker:
-    build: .
-    command: npm run start:worker
-    environment:
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
-    deploy:
-      replicas: 3              # 默认 3 个 Worker
-
-  # PostgreSQL
-  db:
-    image: postgres:16-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=wpsan
-      - POSTGRES_PASSWORD=password
-
-  # Redis
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-
-volumes:
-  postgres_data:
-  redis_data:
+# 扫描配置
+SCAN_CONCURRENCY=10
+SCAN_SKIP_SCANNED=true
 ```
+
+### Supervisor 配置（队列处理器）
+
+```ini
+; /etc/supervisor/conf.d/wpsan-queue.conf
+
+[program:wpsan-queue]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/wpsan/artisan queue:work redis --queue=scan,poc --sleep=3 --tries=3
+autostart=true
+autorestart=true
+user=www-data
+numprocs=4
+redirect_stderr=true
+stdout_logfile=/var/log/wpsan-queue.log
+
+[program:wpsan-scheduler]
+command=php /var/www/wpsan/artisan schedule:work
+autostart=true
+autorestart=true
+user=www-data
+redirect_stderr=true
+stdout_logfile=/var/log/wpsan-scheduler.log
+```
+
+### Nginx 配置
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    root /var/www/wpsan/public;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.php;
+
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
 
 ---
 
