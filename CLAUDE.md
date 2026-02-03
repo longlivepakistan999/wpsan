@@ -90,99 +90,117 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 
 ```
 wpsan/
-├── app/
-│   ├── Console/
-│   │   └── Commands/            # CLI 命令
-│   │       ├── ImportTargets.php
-│   │       ├── ScanTargets.php
-│   │       ├── RunPoc.php
-│   │       └── UpdateCfIps.php
+├── public/                      # Web 入口
+│   ├── index.php                # 主入口
+│   ├── api.php                  # API 入口
+│   └── assets/                  # 静态资源
+│       ├── css/
+│       └── js/
+│
+├── src/                         # 核心源码
+│   ├── Core/                    # 核心类
+│   │   ├── App.php              # 应用主类
+│   │   ├── Router.php           # 路由器
+│   │   ├── Database.php         # 数据库连接 (PDO)
+│   │   ├── Redis.php            # Redis 连接
+│   │   ├── Config.php           # 配置管理
+│   │   └── Logger.php           # 日志
 │   │
-│   ├── Http/
-│   │   ├── Controllers/
-│   │   │   ├── TargetController.php
-│   │   │   ├── ScanController.php
-│   │   │   ├── PocController.php
-│   │   │   └── VulnController.php
-│   │   └── Middleware/
-│   │       └── ApiKeyAuth.php   # API Key 认证
+│   ├── Scanner/                 # 扫描模块
+│   │   ├── ScannerService.php   # 扫描主服务
+│   │   ├── WordPressDetector.php
+│   │   ├── CloudflareDetector.php
+│   │   ├── VersionDetector.php
+│   │   ├── AssetParser.php
+│   │   ├── PluginVersionDetector.php
+│   │   └── ThemeVersionDetector.php
 │   │
-│   ├── Models/                  # 数据模型
+│   ├── Import/                  # 导入模块
+│   │   ├── ImportService.php
+│   │   ├── TxtParser.php
+│   │   └── CsvParser.php
+│   │
+│   ├── Poc/                     # POC 模块
+│   │   ├── PocRunner.php
+│   │   ├── PocRegistry.php
+│   │   └── BasePoc.php
+│   │
+│   ├── Queue/                   # 队列模块
+│   │   ├── QueueManager.php     # 队列管理器
+│   │   ├── Worker.php           # 队列消费者
+│   │   └── Jobs/
+│   │       ├── ScanJob.php
+│   │       ├── PocJob.php
+│   │       └── ImportJob.php
+│   │
+│   ├── Api/                     # API 控制器
+│   │   ├── TargetApi.php
+│   │   ├── ScanApi.php
+│   │   ├── PocApi.php
+│   │   ├── VulnApi.php
+│   │   └── ProbeApi.php
+│   │
+│   ├── Model/                   # 数据模型
 │   │   ├── Target.php
 │   │   ├── TargetGroup.php
-│   │   ├── ScanResult.php
 │   │   ├── ScanPlugin.php
 │   │   ├── ScanTheme.php
 │   │   ├── Vulnerability.php
-│   │   ├── Poc.php
-│   │   └── ImportJob.php
+│   │   └── PocExecution.php
 │   │
-│   ├── Services/                # 业务逻辑
-│   │   ├── Scanner/
-│   │   │   ├── ScannerService.php       # 扫描主服务
-│   │   │   ├── WordPressDetector.php    # WP 识别
-│   │   │   ├── CloudflareDetector.php   # CF 检测 (IP段)
-│   │   │   ├── VersionDetector.php      # 版本检测
-│   │   │   ├── AssetParser.php          # 资产解析
-│   │   │   ├── PluginVersionDetector.php
-│   │   │   └── ThemeVersionDetector.php
-│   │   │
-│   │   ├── Import/
-│   │   │   ├── ImportService.php
-│   │   │   ├── TxtParser.php
-│   │   │   └── CsvParser.php
-│   │   │
-│   │   ├── Poc/
-│   │   │   ├── PocRunner.php
-│   │   │   ├── PocRegistry.php
-│   │   │   └── BasePoc.php
-│   │   │
-│   │   └── HttpClient.php       # HTTP 客户端封装
-│   │
-│   ├── Jobs/                    # 队列任务
-│   │   ├── ScanTargetJob.php
-│   │   ├── RunPocJob.php
-│   │   └── ImportFileJob.php
-│   │
-│   └── Events/                  # 事件
-│       ├── ScanCompleted.php
-│       ├── VulnerabilityFound.php
-│       └── PocResultReady.php
-│
-├── config/
-│   ├── wpsan.php                # 扫描配置（并发数等）
-│   └── cloudflare.php           # CF IP 段配置
-│
-├── database/
-│   └── migrations/              # 数据库迁移
+│   └── Utils/                   # 工具类
+│       ├── HttpClient.php       # cURL 封装
+│       ├── IpUtils.php          # IP 地址工具
+│       └── Validator.php        # 验证器
 │
 ├── pocs/                        # POC 模块目录
-│   ├── wordpress/               # WP 核心漏洞 POC
-│   ├── plugins/                 # 插件漏洞 POC
-│   │   ├── Elementor/
-│   │   ├── WooCommerce/
+│   ├── wordpress/               # WP 核心漏洞
+│   ├── plugins/                 # 插件漏洞
+│   │   ├── elementor/
+│   │   ├── woocommerce/
 │   │   └── ...
-│   └── themes/                  # 主题漏洞 POC
+│   └── themes/                  # 主题漏洞
 │
-├── storage/
-│   ├── app/
-│   │   ├── imports/             # 导入文件
-│   │   └── cloudflare/          # CF IP 段
-│   │       ├── ips-v4.txt
-│   │       └── ips-v6.txt
-│   └── logs/
+├── probe/                       # 探针程序
+│   ├── probe.php                # 探针入口
+│   ├── ProbeWorker.php
+│   └── config.php
 │
-├── routes/
-│   ├── api.php                  # API 路由
-│   └── web.php
+├── config/                      # 配置文件
+│   ├── app.php                  # 应用配置
+│   ├── database.php             # 数据库配置
+│   └── scan.php                 # 扫描配置
 │
-├── resources/
-│   └── views/                   # 前端视图
+├── data/                        # 数据文件
+│   └── cloudflare/              # CF IP 段
+│       ├── ips-v4.txt
+│       └── ips-v6.txt
 │
-├── tests/
-├── docker-compose.yml
+├── storage/                     # 存储目录
+│   ├── imports/                 # 导入文件
+│   ├── logs/                    # 日志
+│   └── cache/                   # 缓存
+│
+├── views/                       # 视图模板
+│   ├── layout.php
+│   ├── dashboard.php
+│   ├── targets/
+│   ├── scans/
+│   └── vulns/
+│
+├── bin/                         # CLI 脚本
+│   ├── worker.php               # 队列 Worker
+│   ├── import.php               # 导入命令
+│   ├── scan.php                 # 扫描命令
+│   └── update-cf-ips.php        # 更新 CF IP
+│
+├── sql/                         # SQL 文件
+│   └── schema.sql               # 数据库结构
+│
+├── vendor/                      # Composer 依赖
 ├── composer.json
-└── .env
+├── .env                         # 环境变量
+└── .env.example
 ```
 
 ---
@@ -191,21 +209,21 @@ wpsan/
 
 ### 核心技术
 - **语言**: PHP 8.2+
-- **框架**: Laravel 10+ 或原生 PHP
-- **HTTP 客户端**: Guzzle
-- **数据库**: MySQL 8.0+
-- **缓存/队列**: Redis
-- **消息队列**: Laravel Queue (Redis 驱动) 或 Supervisor + 自定义队列
-- **WebSocket**: Laravel Reverb 或 Swoole
+- **框架**: 原生 PHP（无框架）
+- **HTTP 客户端**: cURL / Guzzle
+- **数据库**: MySQL 8.0+ (PDO)
+- **缓存/队列**: Redis (Predis)
+- **消息队列**: 自定义 Redis 队列 + Supervisor
+- **WebSocket**: Swoole 或 Workerman
 
 ### 分布式
-- **容器化**: Docker + Docker Compose
+- **部署方式**: 探针模式（无 Docker）
 - **进程管理**: Supervisor
-- **编排**: Kubernetes (可选)
 
 ### 前端 (Web UI)
-- **框架**: Vue 3 + Inertia.js 或纯 Blade 模板
-- **UI 组件**: Element Plus 或 Tailwind CSS
+- **模板**: 原生 PHP 模板
+- **样式**: Bootstrap 5 或 Tailwind CSS
+- **交互**: 原生 JavaScript / jQuery
 
 ### 认证
 - **无认证**: 单用户私有部署，不需要 API 认证
@@ -2001,17 +2019,18 @@ composer install --optimize-autoloader --no-dev
 cp .env.example .env
 vim .env
 
-# 4. 数据库迁移
-php artisan migrate
+# 4. 导入数据库结构
+mysql -u root -p wpsan < sql/schema.sql
 
-# 5. 生成应用密钥
-php artisan key:generate
+# 5. 设置目录权限
+chmod -R 755 storage/
+chown -R www-data:www-data storage/
 
 # 6. 更新 Cloudflare IP 段
-php artisan wpsan:update-cf-ips
+php bin/update-cf-ips.php
 
-# 7. 启动队列处理器
-php artisan queue:work redis --queue=scan,poc --tries=3
+# 7. 启动队列 Worker
+php bin/worker.php &
 
 # 8. 配置 Nginx
 sudo cp nginx.conf /etc/nginx/sites-available/wpsan
@@ -2025,12 +2044,10 @@ sudo nginx -t && sudo systemctl reload nginx
 # .env
 
 APP_NAME=WPSan
-APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://your-domain.com
 
 # 数据库
-DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=wpsan
@@ -2039,11 +2056,8 @@ DB_PASSWORD=your-db-password
 
 # Redis
 REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=null
+REDIS_PASSWORD=
 REDIS_PORT=6379
-
-# 队列
-QUEUE_CONNECTION=redis
 
 # 扫描配置
 SCAN_CONCURRENCY=10
@@ -2057,21 +2071,14 @@ SCAN_SKIP_SCANNED=true
 
 [program:wpsan-queue]
 process_name=%(program_name)s_%(process_num)02d
-command=php /var/www/wpsan/artisan queue:work redis --queue=scan,poc --sleep=3 --tries=3
+command=php /var/www/wpsan/bin/worker.php
+directory=/var/www/wpsan
 autostart=true
 autorestart=true
 user=www-data
 numprocs=4
 redirect_stderr=true
 stdout_logfile=/var/log/wpsan-queue.log
-
-[program:wpsan-scheduler]
-command=php /var/www/wpsan/artisan schedule:work
-autostart=true
-autorestart=true
-user=www-data
-redirect_stderr=true
-stdout_logfile=/var/log/wpsan-scheduler.log
 ```
 
 ### Nginx 配置
@@ -2091,6 +2098,10 @@ server {
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location /api/ {
+        try_files $uri $uri/ /api.php?$query_string;
     }
 
     location = /favicon.ico { access_log off; log_not_found off; }
@@ -2142,31 +2153,36 @@ docs: update API documentation
 ## 常用命令
 
 ```bash
-# 开发
-npm run dev                    # 开发模式 (API)
-npm run dev:worker             # 开发模式 (Worker)
-npm run build                  # 构建
+# 队列 Worker
+php bin/worker.php                     # 启动队列处理器
+php bin/worker.php --concurrency=20    # 指定并发数
 
-# 测试
-npm run test                   # 运行测试
-npm run test:poc               # 测试 POC 模块
+# 资产导入
+php bin/import.php targets.txt                    # 导入 TXT
+php bin/import.php targets.csv --group=group1    # 导入到指定分组
 
-# 数据库
-npm run db:migrate             # 运行迁移
-npm run db:seed                # 填充测试数据
-npm run vulndb:sync            # 同步漏洞库
+# 扫描
+php bin/scan.php --all                            # 扫描所有资产
+php bin/scan.php --group=group1                   # 扫描指定分组
+php bin/scan.php --limit=10000                    # 限制扫描数量
+
+# POC 执行
+php bin/poc.php --poc=elementor-rce-2024 --plugin=elementor
 
 # Cloudflare IP 更新
-npm run cf:update              # 从 cloudflare.com 更新 IP 段
+php bin/update-cf-ips.php              # 从 cloudflare.com 更新 IP 段
 
-# Docker
-docker-compose up -d           # 启动所有服务
-docker-compose up -d --scale worker=5  # 扩展 Worker
-docker-compose logs -f worker  # 查看 Worker 日志
+# 数据库
+mysql -u root -p wpsan < sql/schema.sql           # 初始化数据库
+mysql -u root -p wpsan < sql/seed.sql             # 填充测试数据
 
-# POC 开发
-npm run poc:create             # 创建 POC 模板
-npm run poc:validate           # 验证 POC 格式
+# 探针 (在探针服务器上运行)
+php probe/probe.php                    # 启动探针
+
+# Supervisor 管理
+sudo supervisorctl status              # 查看状态
+sudo supervisorctl restart wpsan-queue # 重启队列
+sudo supervisorctl restart wpsan-probe # 重启探针
 ```
 
 ---
