@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 操作日志</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .card-header {
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+        }
+        .filter-bar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .table th {
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 2px solid #eee;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        .table td {
+            vertical-align: middle;
+            padding: 12px 8px;
+        }
+        .log-action {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .log-action.import { color: #0d6efd; }
+        .log-action.scan { color: #198754; }
+        .log-action.poc { color: #dc3545; }
+        .log-action.vuln { color: #fd7e14; }
+        .log-action.delete { color: #6c757d; }
+        .log-action.export { color: #6610f2; }
+        .log-detail {
+            max-width: 300px;
+            color: #6c757d;
+            font-size: 13px;
+        }
+        .log-time {
+            font-size: 13px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="targets.html">
+                    <i class="bi bi-bullseye"></i> 资产管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="scans.html">
+                    <i class="bi bi-search"></i> 扫描任务
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">操作日志</h4>
+                <small class="text-muted">系统操作审计记录</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary">
+                    <i class="bi bi-download"></i> 导出日志
+                </button>
+                <button class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有操作类型</option>
+                        <option value="import">导入资产</option>
+                        <option value="scan">扫描任务</option>
+                        <option value="poc">POC 执行</option>
+                        <option value="vuln">漏洞管理</option>
+                        <option value="delete">删除操作</option>
+                        <option value="export">数据导出</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="date" class="form-control" placeholder="开始日期">
+                </div>
+                <div class="col-md-2">
+                    <input type="date" class="form-control" placeholder="结束日期">
+                </div>
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="搜索操作详情...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-primary w-100">筛选</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志列表 -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th width="180">时间</th>
+                                <th width="150">操作类型</th>
+                                <th width="150">操作对象</th>
+                                <th>详情</th>
+                                <th width="130">IP 地址</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:35:22</td>
+                                <td><span class="log-action poc">poc.execute</span></td>
+                                <td>POC: elementor-rce</td>
+                                <td class="log-detail">批量执行 POC，目标数: 1,523，发现漏洞: 234</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:30:15</td>
+                                <td><span class="log-action scan">scan.batch_start</span></td>
+                                <td>Group: 电商网站</td>
+                                <td class="log-detail">开始批量扫描，目标数: 50,000</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:25:08</td>
+                                <td><span class="log-action import">target.import</span></td>
+                                <td>Job: import_abc123</td>
+                                <td class="log-detail">导入资产文件 targets_20240115.csv，成功: 48,500，重复: 1,200，无效: 300</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:20:45</td>
+                                <td><span class="log-action vuln">vuln.create</span></td>
+                                <td>Vuln: CVE-2024-5678</td>
+                                <td class="log-detail">添加漏洞: Jetpack SSRF Vulnerability</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:15:30</td>
+                                <td><span class="log-action export">export.vulns</span></td>
+                                <td>-</td>
+                                <td class="log-detail">导出漏洞报告，格式: CSV，筛选: severity=critical,high</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:10:12</td>
+                                <td><span class="log-action delete">target.batch_delete</span></td>
+                                <td>-</td>
+                                <td class="log-detail">批量删除资产，数量: 500</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 10:05:55</td>
+                                <td><span class="log-action poc">poc.batch_execute</span></td>
+                                <td>POC: woo-sqli</td>
+                                <td class="log-detail">批量执行 POC，目标数: 3,892，发现漏洞: 567</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 09:55:33</td>
+                                <td><span class="log-action scan">scan.start</span></td>
+                                <td>Target: example.com</td>
+                                <td class="log-detail">开始扫描单个目标</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 09:50:20</td>
+                                <td><span class="log-action import">target.import</span></td>
+                                <td>Job: import_xyz789</td>
+                                <td class="log-detail">导入资产文件 sites.txt，成功: 10,000，重复: 50，无效: 20</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 09:45:10</td>
+                                <td><span class="log-action vuln">vuln.update</span></td>
+                                <td>Vuln: CVE-2024-1234</td>
+                                <td class="log-detail">更新漏洞信息: 修改影响版本范围</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 09:40:05</td>
+                                <td><span class="log-action export">export.targets</span></td>
+                                <td>-</td>
+                                <td class="log-detail">导出资产列表，格式: JSON，筛选: is_wordpress=1, has_vuln=1</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                            <tr>
+                                <td class="log-time">2024-01-15 09:35:00</td>
+                                <td><span class="log-action delete">target.delete</span></td>
+                                <td>Target: old-site.com</td>
+                                <td class="log-detail">删除单个资产</td>
+                                <td><code>192.168.1.100</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <div class="text-muted">
+                    显示 1-50 / 共 12,345 条
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item"><a class="page-link" href="#">2</a></li>
+                        <li class="page-item"><a class="page-link" href="#">3</a></li>
+                        <li class="page-item"><a class="page-link" href="#">...</a></li>
+                        <li class="page-item"><a class="page-link" href="#">247</a></li>
+                        <li class="page-item"><a class="page-link" href="#">下一页</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

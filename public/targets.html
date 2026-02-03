@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 资产管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .card-header {
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+        }
+        .filter-bar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .table th {
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 2px solid #eee;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        .table td {
+            vertical-align: middle;
+            padding: 12px 8px;
+        }
+        .url-cell {
+            max-width: 300px;
+        }
+        .url-cell a {
+            color: #1e3a5f;
+            text-decoration: none;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .url-cell a:hover {
+            color: #0d6efd;
+        }
+        .badge-wp { background: #21759b; }
+        .badge-cf { background: #f38020; }
+        .status-badge {
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        .vuln-count {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .vuln-count.has-vuln {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        .action-btns .btn {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .pagination {
+            margin-bottom: 0;
+        }
+        .select-all-bar {
+            background: #e7f1ff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .select-all-bar.show {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="targets.html">
+                    <i class="bi bi-bullseye"></i> 资产管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="scans.html">
+                    <i class="bi bi-search"></i> 扫描任务
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">资产管理</h4>
+                <small class="text-muted">共 523,456 个资产</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">
+                    <i class="bi bi-upload"></i> 导入资产
+                </button>
+                <button class="btn btn-outline-secondary">
+                    <i class="bi bi-download"></i> 导出
+                </button>
+                <button class="btn btn-primary">
+                    <i class="bi bi-play-fill"></i> 批量扫描
+                </button>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="搜索 URL 或域名...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有分组</option>
+                        <option value="1">电商网站</option>
+                        <option value="2">企业官网</option>
+                        <option value="3">博客站点</option>
+                        <option value="4">政府网站</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有状态</option>
+                        <option value="pending">待扫描</option>
+                        <option value="scanning">扫描中</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有类型</option>
+                        <option value="wp">WordPress</option>
+                        <option value="non-wp">非 WordPress</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">漏洞筛选</option>
+                        <option value="has">有漏洞</option>
+                        <option value="no">无漏洞</option>
+                        <option value="critical">有严重漏洞</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-outline-primary w-100">筛选</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 批量操作栏 -->
+        <div class="select-all-bar show">
+            <div>
+                <input type="checkbox" class="form-check-input me-2" id="selectAllPage">
+                <span>已选择 <strong>25</strong> 项</span>
+                <a href="#" class="ms-2">选择全部 523,456 项</a>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary"><i class="bi bi-play-fill"></i> 扫描选中</button>
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> 删除选中</button>
+            </div>
+        </div>
+
+        <!-- 资产列表 -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th width="40">
+                                    <input type="checkbox" class="form-check-input">
+                                </th>
+                                <th>URL</th>
+                                <th width="100">类型</th>
+                                <th width="100">WP版本</th>
+                                <th width="80">CF</th>
+                                <th width="100">漏洞</th>
+                                <th width="100">状态</th>
+                                <th width="150">最后扫描</th>
+                                <th width="120">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input" checked></td>
+                                <td class="url-cell">
+                                    <a href="scan-detail.html">https://www.example1.com</a>
+                                    <small class="text-muted d-block">example1.com</small>
+                                </td>
+                                <td><span class="badge badge-wp">WordPress</span></td>
+                                <td>6.4.2</td>
+                                <td><span class="badge badge-cf"><i class="bi bi-cloud"></i></span></td>
+                                <td>
+                                    <span class="vuln-count has-vuln">
+                                        <i class="bi bi-bug-fill"></i> 3
+                                    </span>
+                                </td>
+                                <td><span class="badge bg-success status-badge">已完成</span></td>
+                                <td><small>2024-01-15 10:30</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="扫描"><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input" checked></td>
+                                <td class="url-cell">
+                                    <a href="scan-detail.html">https://shop.example2.com</a>
+                                    <small class="text-muted d-block">example2.com</small>
+                                </td>
+                                <td><span class="badge badge-wp">WordPress</span></td>
+                                <td>6.3.1</td>
+                                <td><span class="text-muted">-</span></td>
+                                <td>
+                                    <span class="vuln-count has-vuln">
+                                        <i class="bi bi-bug-fill"></i> 5
+                                    </span>
+                                </td>
+                                <td><span class="badge bg-success status-badge">已完成</span></td>
+                                <td><small>2024-01-15 10:25</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="扫描"><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="url-cell">
+                                    <a href="scan-detail.html">https://blog.example3.com/news</a>
+                                    <small class="text-muted d-block">example3.com</small>
+                                </td>
+                                <td><span class="badge badge-wp">WordPress</span></td>
+                                <td>6.4.1</td>
+                                <td><span class="badge badge-cf"><i class="bi bi-cloud"></i></span></td>
+                                <td>
+                                    <span class="vuln-count">
+                                        <i class="bi bi-check-circle text-success"></i> 0
+                                    </span>
+                                </td>
+                                <td><span class="badge bg-success status-badge">已完成</span></td>
+                                <td><small>2024-01-15 10:20</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="扫描"><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="url-cell">
+                                    <a href="#">https://www.example4.org</a>
+                                    <small class="text-muted d-block">example4.org</small>
+                                </td>
+                                <td><span class="badge bg-secondary">非WP</span></td>
+                                <td>-</td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="badge bg-success status-badge">已完成</span></td>
+                                <td><small>2024-01-15 10:15</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="扫描"><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="url-cell">
+                                    <a href="#">https://store.example5.cn</a>
+                                    <small class="text-muted d-block">example5.cn</small>
+                                </td>
+                                <td><span class="badge badge-wp">WordPress</span></td>
+                                <td>-</td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="badge bg-warning text-dark status-badge">扫描中</span></td>
+                                <td><small>-</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-secondary btn-sm" disabled><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="url-cell">
+                                    <a href="#">https://www.example6.net</a>
+                                    <small class="text-muted d-block">example6.net</small>
+                                </td>
+                                <td><span class="badge bg-light text-dark">待检测</span></td>
+                                <td>-</td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="badge bg-secondary status-badge">待扫描</span></td>
+                                <td><small>-</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="扫描"><i class="bi bi-play-fill"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="url-cell">
+                                    <a href="#">https://www.example7.com</a>
+                                    <small class="text-muted d-block">example7.com</small>
+                                </td>
+                                <td><span class="badge bg-light text-dark">待检测</span></td>
+                                <td>-</td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="text-muted">-</span></td>
+                                <td><span class="badge bg-danger status-badge">失败</span></td>
+                                <td><small>2024-01-15 09:30</small></td>
+                                <td class="action-btns">
+                                    <button class="btn btn-outline-primary btn-sm" title="重试"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm" title="详情"><i class="bi bi-eye"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" title="删除"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <div class="text-muted">
+                    显示 1-50 / 共 523,456 条
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm">
+                        <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item"><a class="page-link" href="#">2</a></li>
+                        <li class="page-item"><a class="page-link" href="#">3</a></li>
+                        <li class="page-item"><a class="page-link" href="#">...</a></li>
+                        <li class="page-item"><a class="page-link" href="#">10470</a></li>
+                        <li class="page-item"><a class="page-link" href="#">下一页</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </main>
+
+    <!-- 导入资产弹窗 -->
+    <div class="modal fade" id="importModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-upload"></i> 导入资产</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">上传文件</label>
+                        <input type="file" class="form-control" accept=".txt,.csv">
+                        <div class="form-text">支持 TXT 和 CSV 格式，每行一个URL（必须带 http:// 或 https://）</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">选择分组</label>
+                        <select class="form-select">
+                            <option value="">不分组</option>
+                            <option value="1">电商网站</option>
+                            <option value="2">企业官网</option>
+                            <option value="3">博客站点</option>
+                            <option value="new">+ 新建分组</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>提示：</strong>支持大文件导入（500MB+），导入过程异步处理，可在进度页面查看。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary"><i class="bi bi-upload"></i> 开始导入</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
