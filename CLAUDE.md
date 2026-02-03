@@ -294,12 +294,14 @@ interface IImportJob {
 
 #### 支持的文件格式
 
-**TXT 格式** - 一行一个 URL：
+**TXT 格式** - 一行一个 URL（必须带协议）：
 ```
 https://example1.com
 https://example2.com
 http://example3.com/blog
 ```
+
+> **注意**：URL 必须以 `http://` 或 `https://` 开头，不带协议的会被标记为无效。
 
 **CSV 格式** - 支持多列，自动识别 URL 列：
 ```csv
@@ -386,7 +388,7 @@ class TargetImporter {
 
     for await (const line of rl) {
       processed++;
-      const url = this.normalizeUrl(line.trim());
+      const url = this.validateUrl(line.trim());
 
       if (!url) {
         invalid++;
@@ -444,8 +446,11 @@ class TargetImporter {
       const url = this.extractUrlFromRow(row);
       if (!url) continue;
 
+      const validUrl = this.validateUrl(url);
+      if (!validUrl) continue;  // 跳过无协议的 URL
+
       batch.push({
-        url: this.normalizeUrl(url),
+        url: validUrl,
         name: row.name || row.title || row.域名,
         tags: this.parseTags(row.tags || row.标签),
       });
@@ -462,13 +467,13 @@ class TargetImporter {
     }
   }
 
-  // URL 规范化
-  private normalizeUrl(url: string): string | null {
+  // URL 验证（必须带协议）
+  private validateUrl(url: string): string | null {
     if (!url) return null;
 
-    // 自动补充协议
+    // 必须以 http:// 或 https:// 开头，不自动补充
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
+      return null;  // 无效，缺少协议
     }
 
     try {
