@@ -15,6 +15,97 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 
 ---
 
+## 当前项目状态 (Current Project Status)
+
+> **最后更新**: 2026-02-03
+
+### 实现进度总览
+
+| 类别 | 状态 | 说明 |
+|------|------|------|
+| **规格文档** | ✅ 完成 | 本 CLAUDE.md 包含完整的项目规格 |
+| **UI 原型** | ✅ 完成 | 9 个静态 HTML 页面 (Bootstrap 5) |
+| **后端代码** | ⬜ 未开始 | 所有 PHP 代码待开发 |
+| **数据库** | ⬜ 未开始 | schema.sql 待创建 |
+| **配置文件** | ⬜ 未开始 | composer.json, .env 待创建 |
+
+### 已完成的文件
+
+```
+wpsan/
+├── CLAUDE.md                    ✅ 完整项目规格文档
+└── public/                      ✅ UI 原型页面
+    ├── dashboard.html           ✅ 仪表盘 (21 KB)
+    ├── targets.html             ✅ 资产管理 (24 KB)
+    ├── scans.html               ✅ 扫描列表 (35 KB)
+    ├── scan-detail.html         ✅ 扫描详情 (26 KB)
+    ├── pocs.html                ✅ POC 管理 (27 KB)
+    ├── vulns.html               ✅ 漏洞库 (24 KB)
+    ├── probes.html              ✅ 探针状态 (33 KB)
+    ├── logs.html                ✅ 操作日志 (15 KB)
+    └── import-progress.html     ✅ 导入进度 (22 KB)
+```
+
+### 待创建的目录结构
+
+以下目录和文件需要创建（当前不存在）：
+
+```
+wpsan/
+├── src/                         ⬜ 核心 PHP 源码 (全部待开发)
+├── config/                      ⬜ 配置文件
+├── views/                       ⬜ PHP 视图模板
+├── bin/                         ⬜ CLI 脚本
+├── sql/                         ⬜ 数据库结构
+├── pocs/                        ⬜ POC 模块
+├── probe/                       ⬜ 探针程序
+├── data/                        ⬜ 数据文件
+├── storage/                     ⬜ 存储目录
+├── vendor/                      ⬜ Composer 依赖
+├── composer.json                ⬜ 待创建
+└── .env.example                 ⬜ 待创建
+```
+
+### 开发阶段
+
+当前处于 **Phase 0: UI 原型** 阶段，下一步是 **Phase 1: 基础框架**
+
+---
+
+## AI 助手开发指南
+
+### 重要注意事项
+
+1. **UI 原型已完成** - `public/*.html` 是静态 Bootstrap 5 页面，用于预览 UI 设计
+2. **后端从零开始** - 所有 PHP 代码需要从头编写
+3. **参考 UI 设计** - 实现后端时应参考 HTML 原型的结构和功能
+4. **遵循规格** - 本文档后续章节包含详细的 API、数据库、架构设计
+
+### 开发顺序建议
+
+```
+1. 创建 composer.json 和安装依赖
+2. 创建 .env.example 和 config/ 配置文件
+3. 创建 sql/schema.sql 数据库结构
+4. 实现 src/Core/ 基础框架
+5. 实现 src/Utils/ 工具类
+6. 实现 src/Scanner/ 扫描模块
+7. 实现 src/Api/ API 端点
+8. 将 public/*.html 转换为 views/*.php 模板
+```
+
+### 代码规范
+
+- **PHP 版本**: 8.2+
+- **命名空间**: `WPSan\`
+- **PSR-4 自动加载**: `src/` 目录
+- **代码风格**: PSR-12
+- **错误处理**: 使用异常，不使用 die/exit
+- **数据库**: PDO prepared statements（防止 SQL 注入）
+- **HTTP 请求**: 使用 Guzzle，设置合理超时
+
+---
+
 ## 项目初始化
 
 ### 创建项目目录结构
@@ -153,17 +244,20 @@ composer install
 
 ### 9. 前端视图 (Views)
 
-| 任务 | 文件 | 状态 | 说明 |
-|------|------|------|------|
-| 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部 |
-| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
-| 资产列表 | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
-| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 导入进度 |
-| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
-| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 漏洞列表 |
-| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
-| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 探针监控 |
-| 操作日志 | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
+> **注意**: UI 原型已完成，存放在 `public/*.html`，需要转换为 `views/*.php` 模板
+
+| 任务 | PHP 文件 | HTML 原型 | 状态 | 说明 |
+|------|----------|-----------|------|------|
+| 公共布局 | `views/layout.php` | - | ⬜ 待开发 | 侧边栏、头部（从 HTML 提取） |
+| 仪表盘 | `views/dashboard.php` | `public/dashboard.html` ✅ | ⬜ PHP待开发 | 统计概览 |
+| 资产列表 | `views/targets/index.php` | `public/targets.html` ✅ | ⬜ PHP待开发 | 资产管理 |
+| 资产导入 | `views/targets/import.php` | `public/import-progress.html` ✅ | ⬜ PHP待开发 | 导入进度 |
+| 扫描列表 | `views/scans/index.php` | `public/scans.html` ✅ | ⬜ PHP待开发 | 扫描任务列表 |
+| 扫描详情 | `views/scans/detail.php` | `public/scan-detail.html` ✅ | ⬜ PHP待开发 | 扫描结果 |
+| 漏洞库 | `views/vulns/index.php` | `public/vulns.html` ✅ | ⬜ PHP待开发 | 漏洞列表 |
+| POC 管理 | `views/pocs/index.php` | `public/pocs.html` ✅ | ⬜ PHP待开发 | POC 列表和执行 |
+| 探针状态 | `views/probes/index.php` | `public/probes.html` ✅ | ⬜ PHP待开发 | 探针监控 |
+| 操作日志 | `views/logs/index.php` | `public/logs.html` ✅ | ⬜ PHP待开发 | 审计日志 |
 
 ### 10. 探针程序 (Probe)
 
@@ -202,10 +296,14 @@ composer install
 建议按以下顺序开发：
 
 ```
-Phase 1: 基础框架
-├── Core (App, Config, Database, Redis, Logger)
-├── Utils (HttpClient, IpUtils, Validator)
-└── SQL Schema
+Phase 0: UI 原型 ✅ 已完成
+└── public/*.html (9 个 Bootstrap 5 静态页面)
+
+Phase 1: 基础框架 ◄── 当前阶段
+├── composer.json, .env.example
+├── sql/schema.sql
+├── Core (App, Config, Database, Redis, Logger, Router)
+└── Utils (HttpClient, IpUtils, Validator)
 
 Phase 2: 扫描核心
 ├── Scanner (全部检测器)
@@ -215,24 +313,25 @@ Phase 2: 扫描核心
 Phase 3: 资产管理
 ├── Import (ImportService, TxtParser, CsvParser)
 ├── Api (TargetApi, ScanApi)
-└── Views (dashboard, targets)
+├── public/index.php, public/api.php
+└── Views (将 HTML 转换为 PHP 模板)
 
 Phase 4: POC 系统
 ├── Poc (BasePoc, PocRegistry, PocRunner)
 ├── Model (Vulnerability, PocExecution)
 ├── Api (PocApi, VulnApi)
-└── Views (pocs, vulns)
+└── 示例 POC 开发
 
 Phase 5: 分布式
 ├── Probe (ProbeWorker)
 ├── Api (ProbeApi)
-└── Views (probes)
+└── Supervisor 配置
 
 Phase 6: 完善功能
 ├── Export (ExportApi)
 ├── WebSocket (实时通知)
 ├── Logs (操作日志)
-└── 前端交互完善
+└── 前端交互完善 (JavaScript)
 ```
 
 ---
@@ -3010,7 +3109,22 @@ class OperationLogger
 
 ## 路线图
 
-### Phase 1: MVP
+### Phase 0: UI 原型 ✅ 已完成
+- [x] 项目规格文档 (CLAUDE.md)
+- [x] 仪表盘页面 (dashboard.html)
+- [x] 资产管理页面 (targets.html)
+- [x] 扫描列表页面 (scans.html)
+- [x] 扫描详情页面 (scan-detail.html)
+- [x] POC 管理页面 (pocs.html)
+- [x] 漏洞库页面 (vulns.html)
+- [x] 探针状态页面 (probes.html)
+- [x] 操作日志页面 (logs.html)
+- [x] 导入进度页面 (import-progress.html)
+
+### Phase 1: MVP ◄── 当前目标
+- [ ] 项目初始化 (composer.json, .env)
+- [ ] 数据库结构 (sql/schema.sql)
+- [ ] 核心框架 (src/Core/*)
 - [ ] 核心扫描流程（6 个阶段）
 - [ ] Cloudflare IP 段检测
 - [ ] 资产解析（从 JSON/HTML）
@@ -3030,10 +3144,10 @@ class OperationLogger
 - [ ] Worker 自动扩展
 - [ ] 负载均衡
 
-### Phase 4: Web UI
-- [ ] 扫描管理界面
-- [ ] 实时进度展示
-- [ ] POC 一键执行
+### Phase 4: Web UI 集成
+- [ ] 将 HTML 原型转换为 PHP 模板
+- [ ] 前端 JavaScript 交互
+- [ ] 实时进度展示 (WebSocket)
 - [ ] 报告导出
 
 ### Phase 5: 商业化
