@@ -31,7 +31,7 @@ touch wpsan/src/Import/{ImportService.php,TxtParser.php,CsvParser.php}
 touch wpsan/src/Poc/{PocRunner.php,PocRegistry.php,BasePoc.php}
 touch wpsan/src/Queue/{QueueManager.php,Worker.php}
 touch wpsan/src/Api/{TargetApi.php,ScanApi.php,PocApi.php,VulnApi.php,ProbeApi.php,ExportApi.php}
-touch wpsan/src/Model/{Target.php,TargetGroup.php,ScanPlugin.php,ScanTheme.php,Vulnerability.php,PocExecution.php}
+touch wpsan/src/Model/{Project.php,Target.php,ScanPlugin.php,ScanTheme.php,Vulnerability.php,PocExecution.php}
 touch wpsan/src/Utils/{HttpClient.php,IpUtils.php,Validator.php}
 touch wpsan/config/{app.php,database.php,scan.php}
 touch wpsan/bin/{worker.php,import.php,scan.php,update-cf-ips.php}
@@ -136,8 +136,8 @@ composer install
 
 | 任务 | 文件 | 状态 | 说明 |
 |------|------|------|------|
+| 项目模型 | `src/Model/Project.php` | ⬜ 待开发 | 项目管理（资产归属于项目） |
 | 目标模型 | `src/Model/Target.php` | ⬜ 待开发 | 资产 CRUD |
-| 分组模型 | `src/Model/TargetGroup.php` | ⬜ 待开发 | 分组管理 |
 | 插件模型 | `src/Model/ScanPlugin.php` | ⬜ 待开发 | 扫描发现的插件 |
 | 主题模型 | `src/Model/ScanTheme.php` | ⬜ 待开发 | 扫描发现的主题 |
 | 漏洞模型 | `src/Model/Vulnerability.php` | ⬜ 待开发 | 漏洞库 |
@@ -156,13 +156,13 @@ composer install
 | 任务 | 文件 | 状态 | 说明 |
 |------|------|------|------|
 | 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部 |
-| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
-| 资产列表 | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
-| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 导入进度 |
-| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
-| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 漏洞列表 |
-| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
-| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 探针监控 |
+| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览、项目概览 |
+| 项目列表 | `views/projects/index.php` | ✅ HTML完成 | 项目管理 |
+| 项目详情 | `views/projects/detail.php` | ✅ HTML完成 | 项目内资产、漏洞、扫描记录 |
+| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 单个资产扫描结果 |
+| 漏洞库 | `views/vulns/index.php` | ✅ HTML完成 | 漏洞列表（全局） |
+| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行（全局） |
+| 探针状态 | `views/probes/index.php` | ✅ HTML完成 | 探针监控 |
 | 操作日志 | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
 
 ### 10. 探针程序 (Probe)
@@ -363,8 +363,8 @@ wpsan/
 │   │   └── ProbeApi.php
 │   │
 │   ├── Model/                   # 数据模型
+│   │   ├── Project.php          # 项目（资产归属于项目）
 │   │   ├── Target.php
-│   │   ├── TargetGroup.php
 │   │   ├── ScanPlugin.php
 │   │   ├── ScanTheme.php
 │   │   ├── Vulnerability.php
@@ -406,7 +406,7 @@ wpsan/
 ├── views/                       # 视图模板
 │   ├── layout.php
 │   ├── dashboard.php
-│   ├── targets/
+│   ├── projects/                # 项目管理
 │   ├── scans/
 │   └── vulns/
 │
@@ -453,18 +453,48 @@ wpsan/
 
 ---
 
-## 资产管理（支持 50万+ 目标）
+## 项目化资产管理（支持 50万+ 目标）
+
+### 架构说明
+
+采用**项目（Project）**作为顶层组织单位，资产必须归属于某个项目：
+
+```
+项目 (Project)
+└── 资产 (Target)
+
+POC / 漏洞库 → 全局共享（不分项目）
+```
 
 ### 数据模型
 
 ```typescript
+// 项目
+interface IProject {
+  id: string;
+  name: string;                   // 项目名称
+  description?: string;           // 项目描述
+
+  // 统计摘要（定期更新）
+  stats: {
+    targetCount: number;          // 资产总数
+    wpCount: number;              // WordPress 站点数
+    vulnCount: number;            // 发现漏洞数
+    scannedCount: number;         // 已扫描数
+    scanProgress: number;         // 扫描进度 0-100
+  };
+
+  lastScanAt?: Date;              // 最后扫描时间
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // 目标资产
 interface ITarget {
   id: string;
+  projectId: string;              // 所属项目 ID（必须）
   url: string;                    // 目标 URL
   domain: string;                 // 域名（自动提取）
-  groupId?: string;               // 分组 ID
-  tags?: string[];                // 标签
   status: 'pending' | 'scanning' | 'completed' | 'failed';
 
   // 最近扫描结果摘要
@@ -481,18 +511,10 @@ interface ITarget {
   updatedAt: Date;
 }
 
-// 资产分组
-interface ITargetGroup {
-  id: string;
-  name: string;
-  description?: string;
-  targetCount: number;            // 资产数量
-  createdAt: Date;
-}
-
 // 导入任务
 interface IImportJob {
   id: string;
+  projectId: string;              // 导入到的项目（必须）
   filename: string;
   fileType: 'txt' | 'csv';
   fileSize: number;
@@ -508,7 +530,6 @@ interface IImportJob {
     invalid: number;              // 无效
   };
 
-  groupId?: string;               // 导入到的分组
   error?: string;
 
   createdAt: Date;
@@ -763,38 +784,42 @@ class ImportService
 ### API 设计
 
 ```typescript
-// 资产管理 API
-POST   /api/v1/targets/import           // 上传并导入文件
-GET    /api/v1/targets/import/:jobId    // 获取导入进度
-GET    /api/v1/targets                  // 获取资产列表（分页）
-GET    /api/v1/targets/:id              // 获取单个资产详情
-DELETE /api/v1/targets/:id              // 删除资产
-DELETE /api/v1/targets/batch            // 批量删除
+// 项目管理 API
+POST   /api/v1/projects                         // 创建项目
+GET    /api/v1/projects                         // 获取项目列表
+GET    /api/v1/projects/:id                     // 获取项目详情
+PUT    /api/v1/projects/:id                     // 更新项目
+DELETE /api/v1/projects/:id                     // 删除项目
 
-// 分组管理
-POST   /api/v1/targets/groups           // 创建分组
-GET    /api/v1/targets/groups           // 获取分组列表
-PUT    /api/v1/targets/groups/:id       // 更新分组
-DELETE /api/v1/targets/groups/:id       // 删除分组
+// 项目内资产管理 API
+POST   /api/v1/projects/:projectId/targets/import    // 导入资产到项目
+GET    /api/v1/projects/:projectId/targets/import/:jobId  // 获取导入进度
+GET    /api/v1/projects/:projectId/targets           // 获取项目内资产列表
+POST   /api/v1/projects/:projectId/targets           // 添加单个资产
+DELETE /api/v1/projects/:projectId/targets/:id       // 删除资产
+DELETE /api/v1/projects/:projectId/targets/batch     // 批量删除
 
-// 批量扫描
-POST   /api/v1/targets/scan             // 扫描选中的资产
-POST   /api/v1/targets/groups/:id/scan  // 扫描整个分组
+// 项目扫描
+POST   /api/v1/projects/:projectId/scan              // 扫描整个项目
+POST   /api/v1/projects/:projectId/targets/scan      // 扫描选中的资产
+
+// 项目漏洞
+GET    /api/v1/projects/:projectId/vulnerabilities   // 获取项目内发现的漏洞
 ```
 
 ### 导入 API 示例
 
 ```typescript
-// POST /api/v1/targets/import
+// POST /api/v1/projects/:projectId/targets/import
 // Content-Type: multipart/form-data
 
 // Request:
 // - file: 上传的文件 (TXT/CSV)
-// - groupId: 可选，导入到指定分组
 
 // Response:
 {
   "jobId": "import_abc123",
+  "projectId": "project_xyz",
   "status": "processing",
   "filename": "targets.csv",
   "fileSize": 52428800  // 50MB
@@ -838,13 +863,31 @@ ws.subscribe('import:import_abc123');
 ### MySQL Schema（大规模优化）
 
 ```sql
+-- 项目表
+CREATE TABLE projects (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+
+  -- 统计摘要（定期更新）
+  target_count INT UNSIGNED DEFAULT 0,
+  wp_count INT UNSIGNED DEFAULT 0,
+  vuln_count INT UNSIGNED DEFAULT 0,
+  scanned_count INT UNSIGNED DEFAULT 0,
+
+  last_scan_at DATETIME NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  KEY idx_projects_created (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 目标资产表（优化大规模数据）
 CREATE TABLE targets (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  project_id BIGINT UNSIGNED NOT NULL,   -- 必须属于某个项目
   url VARCHAR(2048) NOT NULL,
   domain VARCHAR(255) NOT NULL,
-  group_id BIGINT UNSIGNED NULL,
-  tags JSON,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
 
   -- 最近扫描摘要（避免 JOIN）
@@ -858,32 +901,24 @@ CREATE TABLE targets (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-  -- 唯一约束用于去重
-  UNIQUE KEY uk_targets_url (url(500)),
+  -- 唯一约束：同一项目内 URL 不重复
+  UNIQUE KEY uk_targets_project_url (project_id, url(500)),
 
   -- 索引优化
+  KEY idx_targets_project (project_id),
   KEY idx_targets_domain (domain),
-  KEY idx_targets_group (group_id),
   KEY idx_targets_status (status),
   KEY idx_targets_created (created_at DESC),
   KEY idx_targets_is_wp (is_wordpress),
   KEY idx_targets_vuln (vuln_count DESC),
 
-  FOREIGN KEY (group_id) REFERENCES target_groups(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 分组表
-CREATE TABLE target_groups (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  description TEXT,
-  target_count INT UNSIGNED DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 导入任务表
 CREATE TABLE import_jobs (
   id VARCHAR(50) PRIMARY KEY,
+  project_id BIGINT UNSIGNED NOT NULL,   -- 导入到的项目
   filename VARCHAR(255) NOT NULL,
   file_type VARCHAR(10) NOT NULL,
   file_size BIGINT UNSIGNED NOT NULL,
@@ -896,13 +931,13 @@ CREATE TABLE import_jobs (
   duplicate_count INT UNSIGNED DEFAULT 0,
   invalid_count INT UNSIGNED DEFAULT 0,
 
-  group_id BIGINT UNSIGNED NULL,
   error TEXT,
 
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME NULL,
 
-  FOREIGN KEY (group_id) REFERENCES target_groups(id) ON DELETE SET NULL
+  KEY idx_import_project (project_id),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 扫描发现的插件
@@ -1035,7 +1070,7 @@ async function getEstimatedCount(table: string): Promise<number> {
 
 // 游标分页（大数据集）
 async function* iterateTargets(
-  groupId?: string,
+  projectId: string,
   batchSize = 10000
 ): AsyncGenerator<ITarget[]> {
   let cursor: string | null = null;
@@ -1043,11 +1078,11 @@ async function* iterateTargets(
   while (true) {
     const result = await db.query(`
       SELECT * FROM targets
-      WHERE ($1::uuid IS NULL OR group_id = $1)
+      WHERE project_id = $1
         AND ($2::uuid IS NULL OR id > $2)
       ORDER BY id
       LIMIT $3
-    `, [groupId, cursor, batchSize]);
+    `, [projectId, cursor, batchSize]);
 
     if (result.rows.length === 0) break;
 
@@ -1060,23 +1095,25 @@ async function* iterateTargets(
 ### CLI 命令
 
 ```bash
-# 导入资产
-wpsan import targets.txt                    # 导入 TXT
-wpsan import targets.csv --group=group1    # 导入到指定分组
-wpsan import targets.csv --tags=prod,cn    # 添加标签
+# 项目管理
+wpsan project create "项目名称"              # 创建项目
+wpsan project list                          # 列出所有项目
+wpsan project delete <project_id>           # 删除项目
 
-# 资产管理
-wpsan targets list                          # 列出资产
-wpsan targets list --group=group1           # 按分组筛选
-wpsan targets list --wp-only                # 只显示 WordPress 站点
-wpsan targets count                         # 资产总数
-wpsan targets export --format=csv           # 导出资产
+# 导入资产到项目
+wpsan import targets.txt --project=<id>     # 导入 TXT 到指定项目
+wpsan import targets.csv --project=<id>     # 导入 CSV 到指定项目
+
+# 资产管理（项目内）
+wpsan targets list --project=<id>           # 列出项目内资产
+wpsan targets list --project=<id> --wp-only # 只显示 WordPress 站点
+wpsan targets count --project=<id>          # 项目内资产总数
+wpsan targets export --project=<id> --format=csv  # 导出项目资产
 
 # 批量扫描
-wpsan scan --all                            # 扫描所有资产
-wpsan scan --group=group1                   # 扫描指定分组
-wpsan scan --limit=10000                    # 限制扫描数量
-wpsan scan --status=pending                 # 只扫描待扫描的
+wpsan scan --project=<id>                   # 扫描整个项目
+wpsan scan --project=<id> --limit=10000     # 限制扫描数量
+wpsan scan --project=<id> --status=pending  # 只扫描待扫描的
 ```
 
 ---
@@ -2557,20 +2594,18 @@ sudo supervisorctl restart wpsan-probe # 重启探针
 ```
 views/
 ├── layout.php                   # 公共布局
-├── dashboard.php                # 仪表盘首页
-├── targets/
-│   ├── index.php                # 资产列表
-│   ├── import.php               # 导入资产
-│   └── groups.php               # 分组管理
+├── dashboard.php                # 仪表盘首页（项目概览）
+├── projects/
+│   ├── index.php                # 项目列表
+│   └── detail.php               # 项目详情（资产、漏洞、扫描记录）
 ├── scans/
-│   ├── index.php                # 扫描任务列表
-│   └── detail.php               # 扫描详情（插件/主题/漏洞）
+│   └── detail.php               # 单个资产扫描详情
 ├── vulns/
-│   ├── index.php                # 漏洞库列表
+│   ├── index.php                # 漏洞库列表（全局）
 │   ├── create.php               # 添加漏洞
 │   └── edit.php                 # 编辑漏洞
 ├── pocs/
-│   ├── index.php                # POC 列表
+│   ├── index.php                # POC 列表（全局）
 │   ├── run.php                  # POC 批量执行
 │   └── results.php              # POC 执行结果
 ├── probes/
@@ -2581,25 +2616,23 @@ views/
 
 ### 1. 仪表盘 (Dashboard)
 
-显示系统概览和关键统计数据：
+显示系统概览、项目概览和关键统计数据：
 
 ```php
 <?php
 // 仪表盘数据结构
 $dashboard = [
+    // 项目统计
+    'projects' => [
+        'total' => 8,                // 项目总数
+        'total_targets' => 500000,   // 总资产数
+    ],
+
     // 资产统计
     'targets' => [
-        'total' => 500000,           // 总资产数
         'wordpress' => 320000,       // WordPress 站点数
         'non_wordpress' => 50000,    // 非 WP 站点
         'pending' => 130000,         // 待扫描
-    ],
-
-    // 扫描统计
-    'scans' => [
-        'completed_today' => 15000,  // 今日完成
-        'running' => 150,            // 正在扫描
-        'queue_size' => 5000,        // 队列中
     ],
 
     // 漏洞统计
@@ -2617,6 +2650,13 @@ $dashboard = [
         'offline' => 1,              // 离线探针
     ],
 
+    // 项目概览（前3个项目）
+    'recent_projects' => [
+        ['name' => '电商客户 A', 'targets' => 125430, 'vulns' => 2345, 'progress' => 78],
+        ['name' => '政府网站检测', 'targets' => 50000, 'vulns' => 892, 'progress' => 100],
+        ['name' => '企业官网批量', 'targets' => 320000, 'vulns' => 15678, 'progress' => 45],
+    ],
+
     // 最近发现的漏洞（实时滚动）
     'recent_vulns' => [
         ['target' => 'https://example1.com', 'vuln' => 'Elementor RCE', 'severity' => 'critical', 'time' => '2分钟前'],
@@ -2627,7 +2667,23 @@ $dashboard = [
 ?>
 ```
 
-### 2. 资产列表
+### 2. 项目列表
+
+显示所有项目卡片，每个项目显示：
+- 项目名称和描述
+- 资产总数、WordPress 站点数
+- 发现的漏洞数
+- 扫描进度
+- 最后扫描时间
+
+### 3. 项目详情
+
+项目详情页包含三个 Tab：
+- **资产列表**：显示项目内所有资产，支持筛选、批量操作
+- **漏洞列表**：显示项目内发现的漏洞，可执行 POC 验证
+- **扫描记录**：显示项目的扫描历史
+
+### 4. 资产列表（项目内）
 
 | 功能 | 说明 |
 |------|------|

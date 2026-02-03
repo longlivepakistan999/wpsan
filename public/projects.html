@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 项目管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .project-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            overflow: hidden;
+            height: 100%;
+        }
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+        .project-card .card-header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            color: #fff;
+            padding: 20px;
+            border: none;
+        }
+        .project-card .card-header h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+        .project-card .card-header small {
+            color: rgba(255,255,255,0.7);
+        }
+        .project-card .card-body {
+            padding: 20px;
+        }
+        .project-stat {
+            text-align: center;
+            padding: 10px;
+        }
+        .project-stat .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+        .project-stat .label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .project-stat.has-vuln .value {
+            color: #dc3545;
+        }
+        .project-card .card-footer {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-top: 1px solid #eee;
+        }
+        .filter-bar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .create-project-card {
+            background: #fff;
+            border: 2px dashed #dee2e6;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .create-project-card:hover {
+            border-color: #0d6efd;
+            background: #f8f9ff;
+        }
+        .create-project-card .content {
+            text-align: center;
+            color: #6c757d;
+        }
+        .create-project-card .content i {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .create-project-card:hover .content {
+            color: #0d6efd;
+        }
+        .badge-wp { background: #21759b; }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="projects.html">
+                    <i class="bi bi-folder"></i> 项目管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">项目管理</h4>
+                <small class="text-muted">共 8 个项目，1,523,456 个资产</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+                    <i class="bi bi-plus-lg"></i> 新建项目
+                </button>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="搜索项目名称...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">排序方式</option>
+                        <option value="name">按名称</option>
+                        <option value="targets">按资产数</option>
+                        <option value="vulns">按漏洞数</option>
+                        <option value="updated">按更新时间</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- 项目卡片列表 -->
+        <div class="row g-4">
+            <!-- 项目 1 -->
+            <div class="col-md-4">
+                <div class="project-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-folder-fill me-2"></i>电商客户 A</h5>
+                        <small>某电商平台安全评估项目</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-4 project-stat">
+                                <div class="value">125,430</div>
+                                <div class="label">资产数</div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value">98,234</div>
+                                <div class="label"><span class="badge badge-wp">WP</span></div>
+                            </div>
+                            <div class="col-4 project-stat has-vuln">
+                                <div class="value">2,345</div>
+                                <div class="label">漏洞数</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-clock"></i> 最后扫描: 2小时前</span>
+                            <span><i class="bi bi-check-circle text-success"></i> 78% 已扫描</span>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <a href="project-detail.html" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-play-fill"></i> 开始扫描</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-upload"></i> 导入资产</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-download"></i> 导出报告</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pencil"></i> 编辑项目</a></li>
+                                <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-trash"></i> 删除项目</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目 2 -->
+            <div class="col-md-4">
+                <div class="project-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-folder-fill me-2"></i>政府网站检测</h5>
+                        <small>2024年度政府网站安全检测</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-4 project-stat">
+                                <div class="value">50,000</div>
+                                <div class="label">资产数</div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value">32,156</div>
+                                <div class="label"><span class="badge badge-wp">WP</span></div>
+                            </div>
+                            <div class="col-4 project-stat has-vuln">
+                                <div class="value">892</div>
+                                <div class="label">漏洞数</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-clock"></i> 最后扫描: 1天前</span>
+                            <span><i class="bi bi-check-circle text-success"></i> 100% 已扫描</span>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <a href="project-detail.html" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-play-fill"></i> 开始扫描</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-upload"></i> 导入资产</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-download"></i> 导出报告</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pencil"></i> 编辑项目</a></li>
+                                <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-trash"></i> 删除项目</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目 3 -->
+            <div class="col-md-4">
+                <div class="project-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-folder-fill me-2"></i>企业官网批量</h5>
+                        <small>中小企业网站安全扫描</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-4 project-stat">
+                                <div class="value">320,000</div>
+                                <div class="label">资产数</div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value">256,000</div>
+                                <div class="label"><span class="badge badge-wp">WP</span></div>
+                            </div>
+                            <div class="col-4 project-stat has-vuln">
+                                <div class="value">15,678</div>
+                                <div class="label">漏洞数</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-clock"></i> 最后扫描: 5小时前</span>
+                            <span><i class="bi bi-hourglass-split text-warning"></i> 45% 扫描中</span>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <a href="project-detail.html" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pause-fill"></i> 暂停扫描</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-upload"></i> 导入资产</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-download"></i> 导出报告</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pencil"></i> 编辑项目</a></li>
+                                <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-trash"></i> 删除项目</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目 4 -->
+            <div class="col-md-4">
+                <div class="project-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-folder-fill me-2"></i>教育行业专项</h5>
+                        <small>高校网站安全检测</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-4 project-stat">
+                                <div class="value">8,500</div>
+                                <div class="label">资产数</div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value">5,200</div>
+                                <div class="label"><span class="badge badge-wp">WP</span></div>
+                            </div>
+                            <div class="col-4 project-stat has-vuln">
+                                <div class="value">234</div>
+                                <div class="label">漏洞数</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-clock"></i> 最后扫描: 3天前</span>
+                            <span><i class="bi bi-check-circle text-success"></i> 100% 已扫描</span>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <a href="project-detail.html" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-play-fill"></i> 开始扫描</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-upload"></i> 导入资产</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-download"></i> 导出报告</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pencil"></i> 编辑项目</a></li>
+                                <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-trash"></i> 删除项目</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目 5 -->
+            <div class="col-md-4">
+                <div class="project-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-folder-fill me-2"></i>金融行业检测</h5>
+                        <small>银行和金融机构网站</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-4 project-stat">
+                                <div class="value">2,300</div>
+                                <div class="label">资产数</div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value">890</div>
+                                <div class="label"><span class="badge badge-wp">WP</span></div>
+                            </div>
+                            <div class="col-4 project-stat">
+                                <div class="value" style="color: #198754;">0</div>
+                                <div class="label">漏洞数</div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between text-muted small">
+                            <span><i class="bi bi-clock"></i> 最后扫描: 1周前</span>
+                            <span><i class="bi bi-check-circle text-success"></i> 100% 已扫描</span>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <a href="project-detail.html" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> 查看详情
+                        </a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-play-fill"></i> 开始扫描</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-upload"></i> 导入资产</a></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-download"></i> 导出报告</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#"><i class="bi bi-pencil"></i> 编辑项目</a></li>
+                                <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-trash"></i> 删除项目</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 新建项目卡片 -->
+            <div class="col-md-4">
+                <div class="create-project-card" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+                    <div class="content">
+                        <i class="bi bi-plus-circle"></i>
+                        <div>新建项目</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 新建项目弹窗 -->
+    <div class="modal fade" id="createProjectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-folder-plus"></i> 新建项目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">项目名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" placeholder="输入项目名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">项目描述</label>
+                        <textarea class="form-control" rows="3" placeholder="输入项目描述（可选）"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">初始资产导入（可选）</label>
+                        <input type="file" class="form-control" accept=".txt,.csv">
+                        <div class="form-text">支持 TXT 和 CSV 格式，每行一个URL（必须带 http:// 或 https://）</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary"><i class="bi bi-check-lg"></i> 创建项目</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
