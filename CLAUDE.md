@@ -1307,114 +1307,255 @@ class PluginVersionDetector {
 }
 ```
 
-### 6. POC 可扩展架构
+### 6. POC 可扩展架构（PHP 类）
 
-```typescript
-// src/poc/base.ts - POC 基类
+```php
+<?php
+// src/Poc/BasePoc.php - POC 基类
 
-export abstract class BasePoc {
-  abstract readonly id: string;           // 唯一标识
-  abstract readonly name: string;         // POC 名称
-  abstract readonly description: string;  // 描述
-  abstract readonly cve?: string;         // CVE 编号
-  abstract readonly severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+namespace WPSan\Poc;
 
-  // 适用条件
-  abstract readonly conditions: {
-    type: 'core' | 'plugin' | 'theme';
-    slug?: string;                        // 插件/主题 slug
-    versionRange: string;                 // 受影响版本，如 "< 3.5.0"
-  };
+abstract class BasePoc
+{
+    // POC 元信息（子类必须定义）
+    public const ID = '';                    // 唯一标识
+    public const NAME = '';                  // POC 名称
+    public const DESCRIPTION = '';           // 描述
+    public const CVE = '';                   // CVE 编号（可选）
+    public const SEVERITY = 'medium';        // critical, high, medium, low, info
 
-  // 验证方法（子类实现）
-  abstract verify(context: IPocContext): Promise<IPocResult>;
-}
+    // 适用条件
+    public const COMPONENT_TYPE = 'plugin';  // core, plugin, theme
+    public const COMPONENT_SLUG = '';        // 插件/主题 slug
+    public const AFFECTED_VERSIONS = '';     // 受影响版本，如 "< 3.5.0"
 
-// POC 上下文
-interface IPocContext {
-  target: string;
-  http: HttpClient;
-  scanResult: IScanResult;    // 当前扫描结果
-}
+    protected HttpClient $http;
 
-// POC 结果
-interface IPocResult {
-  vulnerable: boolean;
-  evidence?: string;          // 漏洞证据
-  details?: Record<string, unknown>;
-}
-
-// src/poc/registry.ts - POC 注册表
-
-class PocRegistry {
-  private pocs: Map<string, BasePoc> = new Map();
-
-  // 注册 POC
-  register(poc: BasePoc): void {
-    this.pocs.set(poc.id, poc);
-  }
-
-  // 根据插件/主题查找关联的 POC
-  findByTarget(type: string, slug: string, version: string): BasePoc[] {
-    return Array.from(this.pocs.values()).filter(poc => {
-      if (poc.conditions.type !== type) return false;
-      if (poc.conditions.slug && poc.conditions.slug !== slug) return false;
-      return semver.satisfies(version, poc.conditions.versionRange);
-    });
-  }
-
-  // 热加载 POC 模块
-  async loadFromDirectory(dir: string): Promise<void> {
-    const files = await glob(`${dir}/**/*.poc.ts`);
-    for (const file of files) {
-      const module = await import(file);
-      if (module.default instanceof BasePoc) {
-        this.register(module.default);
-      }
+    public function __construct(HttpClient $http)
+    {
+        $this->http = $http;
     }
-  }
+
+    /**
+     * 验证漏洞是否存在（子类必须实现）
+     *
+     * @param string $target 目标 URL
+     * @param array $context 上下文信息（插件版本等）
+     * @return PocResult
+     */
+    abstract public function verify(string $target, array $context = []): PocResult;
+
+    /**
+     * 获取 POC 信息
+     */
+    public static function getInfo(): array
+    {
+        return [
+            'id' => static::ID,
+            'name' => static::NAME,
+            'description' => static::DESCRIPTION,
+            'cve' => static::CVE,
+            'severity' => static::SEVERITY,
+            'component_type' => static::COMPONENT_TYPE,
+            'component_slug' => static::COMPONENT_SLUG,
+            'affected_versions' => static::AFFECTED_VERSIONS,
+        ];
+    }
+}
+
+// src/Poc/PocResult.php - POC 执行结果
+
+class PocResult
+{
+    public bool $vulnerable;
+    public ?string $evidence;
+    public array $details;
+
+    public function __construct(bool $vulnerable, ?string $evidence = null, array $details = [])
+    {
+        $this->vulnerable = $vulnerable;
+        $this->evidence = $evidence;
+        $this->details = $details;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'vulnerable' => $this->vulnerable,
+            'evidence' => $this->evidence,
+            'details' => $this->details,
+        ];
+    }
+}
+```
+
+**POC 注册表：**
+
+```php
+<?php
+// src/Poc/PocRegistry.php
+
+namespace WPSan\Poc;
+
+class PocRegistry
+{
+    private array $pocs = [];
+
+    /**
+     * 从目录加载所有 POC
+     */
+    public function loadFromDirectory(string $dir): void
+    {
+        $files = glob($dir . '/**/*.php', GLOB_BRACE);
+
+        foreach ($files as $file) {
+            require_once $file;
+
+            // 获取文件中定义的类
+            $className = $this->getClassNameFromFile($file);
+            if ($className && is_subclass_of($className, BasePoc::class)) {
+                $this->register($className);
+            }
+        }
+    }
+
+    /**
+     * 注册 POC
+     */
+    public function register(string $pocClass): void
+    {
+        $id = $pocClass::ID;
+        $this->pocs[$id] = $pocClass;
+    }
+
+    /**
+     * 根据插件/主题查找关联的 POC
+     */
+    public function findByComponent(string $type, string $slug, ?string $version = null): array
+    {
+        $matched = [];
+
+        foreach ($this->pocs as $pocClass) {
+            if ($pocClass::COMPONENT_TYPE !== $type) continue;
+            if ($pocClass::COMPONENT_SLUG !== $slug) continue;
+
+            // 版本匹配
+            if ($version && $pocClass::AFFECTED_VERSIONS) {
+                if (!$this->versionMatches($version, $pocClass::AFFECTED_VERSIONS)) {
+                    continue;
+                }
+            }
+
+            $matched[] = $pocClass::getInfo();
+        }
+
+        return $matched;
+    }
+
+    /**
+     * 获取 POC 实例
+     */
+    public function get(string $pocId): ?BasePoc
+    {
+        if (!isset($this->pocs[$pocId])) {
+            return null;
+        }
+
+        $http = new HttpClient();
+        return new $this->pocs[$pocId]($http);
+    }
+
+    /**
+     * 版本范围匹配
+     */
+    private function versionMatches(string $version, string $range): bool
+    {
+        // 支持格式: "< 3.5.0", "<= 2.0", "> 1.0", "1.0 - 2.0"
+        if (preg_match('/^<\s*(.+)$/', $range, $m)) {
+            return version_compare($version, trim($m[1]), '<');
+        }
+        if (preg_match('/^<=\s*(.+)$/', $range, $m)) {
+            return version_compare($version, trim($m[1]), '<=');
+        }
+        if (preg_match('/^>\s*(.+)$/', $range, $m)) {
+            return version_compare($version, trim($m[1]), '>');
+        }
+        if (preg_match('/^(.+)\s*-\s*(.+)$/', $range, $m)) {
+            return version_compare($version, trim($m[1]), '>=')
+                && version_compare($version, trim($m[2]), '<=');
+        }
+        return $version === $range;
+    }
 }
 ```
 
 **POC 示例：**
 
-```typescript
-// src/poc/modules/plugins/elementor/CVE-2024-XXXX.poc.ts
+```php
+<?php
+// pocs/plugins/elementor/ElementorRcePoc.php
 
-export default class ElementorRcePoc extends BasePoc {
-  readonly id = 'elementor-rce-2024-xxxx';
-  readonly name = 'Elementor Remote Code Execution';
-  readonly description = 'Elementor plugin allows unauthenticated RCE via...';
-  readonly cve = 'CVE-2024-XXXX';
-  readonly severity = 'critical';
+namespace WPSan\Poc\Plugins\Elementor;
 
-  readonly conditions = {
-    type: 'plugin' as const,
-    slug: 'elementor',
-    versionRange: '< 3.5.0',
-  };
+use WPSan\Poc\BasePoc;
+use WPSan\Poc\PocResult;
 
-  async verify(context: IPocContext): Promise<IPocResult> {
-    // 构造验证请求（仅验证，不利用）
-    const response = await context.http.post(
-      `${context.target}/wp-admin/admin-ajax.php`,
-      {
-        body: new URLSearchParams({
-          action: 'elementor_test_action',
-        }),
-      }
-    );
+class ElementorRcePoc extends BasePoc
+{
+    public const ID = 'elementor-rce-2024-xxxx';
+    public const NAME = 'Elementor Remote Code Execution';
+    public const DESCRIPTION = 'Elementor plugin allows unauthenticated RCE via template import';
+    public const CVE = 'CVE-2024-XXXX';
+    public const SEVERITY = 'critical';
 
-    // 判断漏洞是否存在
-    const vulnerable = response.body.includes('specific_vulnerable_indicator');
+    public const COMPONENT_TYPE = 'plugin';
+    public const COMPONENT_SLUG = 'elementor';
+    public const AFFECTED_VERSIONS = '< 3.5.0';
 
-    return {
-      vulnerable,
-      evidence: vulnerable ? response.body.substring(0, 500) : undefined,
-      details: { statusCode: response.status },
-    };
-  }
+    public function verify(string $target, array $context = []): PocResult
+    {
+        // 构造验证请求（仅验证，不利用）
+        $response = $this->http->post(
+            $target . '/wp-admin/admin-ajax.php',
+            [
+                'action' => 'elementor_ajax',
+                'actions' => json_encode([
+                    [
+                        'action' => 'test_vulnerable_action',
+                    ]
+                ]),
+            ]
+        );
+
+        // 判断漏洞是否存在
+        $vulnerable = strpos($response['body'], 'specific_vulnerable_indicator') !== false;
+
+        return new PocResult(
+            $vulnerable,
+            $vulnerable ? substr($response['body'], 0, 500) : null,
+            ['status_code' => $response['status']]
+        );
+    }
 }
+```
+
+**POC 命名规范：**
+
+```
+pocs/
+├── wordpress/                    # WP 核心漏洞
+│   └── WpCoreXxePoc.php
+├── plugins/                      # 插件漏洞
+│   ├── elementor/
+│   │   ├── ElementorRcePoc.php
+│   │   └── ElementorSsrfPoc.php
+│   ├── woocommerce/
+│   │   └── WooSqlInjectionPoc.php
+│   └── contact-form-7/
+│       └── Cf7FileUploadPoc.php
+└── themes/                       # 主题漏洞
+    └── flavor/
+        └── FlavorLfiPoc.php
 ```
 
 ### 7. POC 执行策略
@@ -2183,6 +2324,464 @@ php probe/probe.php                    # 启动探针
 sudo supervisorctl status              # 查看状态
 sudo supervisorctl restart wpsan-queue # 重启队列
 sudo supervisorctl restart wpsan-probe # 重启探针
+```
+
+---
+
+## 前端界面设计
+
+### 页面结构
+
+```
+views/
+├── layout.php                   # 公共布局
+├── dashboard.php                # 仪表盘首页
+├── targets/
+│   ├── index.php                # 资产列表
+│   ├── import.php               # 导入资产
+│   └── groups.php               # 分组管理
+├── scans/
+│   ├── index.php                # 扫描任务列表
+│   └── detail.php               # 扫描详情（插件/主题/漏洞）
+├── vulns/
+│   ├── index.php                # 漏洞库列表
+│   ├── create.php               # 添加漏洞
+│   └── edit.php                 # 编辑漏洞
+├── pocs/
+│   ├── index.php                # POC 列表
+│   ├── run.php                  # POC 批量执行
+│   └── results.php              # POC 执行结果
+├── probes/
+│   └── index.php                # 探针状态
+└── logs/
+    └── index.php                # 操作日志
+```
+
+### 1. 仪表盘 (Dashboard)
+
+显示系统概览和关键统计数据：
+
+```php
+<?php
+// 仪表盘数据结构
+$dashboard = [
+    // 资产统计
+    'targets' => [
+        'total' => 500000,           // 总资产数
+        'wordpress' => 320000,       // WordPress 站点数
+        'non_wordpress' => 50000,    // 非 WP 站点
+        'pending' => 130000,         // 待扫描
+    ],
+
+    // 扫描统计
+    'scans' => [
+        'completed_today' => 15000,  // 今日完成
+        'running' => 150,            // 正在扫描
+        'queue_size' => 5000,        // 队列中
+    ],
+
+    // 漏洞统计
+    'vulnerabilities' => [
+        'total_found' => 12500,      // 发现的漏洞总数
+        'critical' => 500,           // 严重
+        'high' => 2000,              // 高危
+        'medium' => 5000,            // 中危
+        'low' => 5000,               // 低危
+    ],
+
+    // 探针状态
+    'probes' => [
+        'online' => 5,               // 在线探针
+        'offline' => 1,              // 离线探针
+    ],
+
+    // 最近发现的漏洞（实时滚动）
+    'recent_vulns' => [
+        ['target' => 'https://example1.com', 'vuln' => 'Elementor RCE', 'severity' => 'critical', 'time' => '2分钟前'],
+        ['target' => 'https://example2.com', 'vuln' => 'WooCommerce SQLi', 'severity' => 'high', 'time' => '5分钟前'],
+        // ...
+    ],
+];
+?>
+```
+
+### 2. 资产列表
+
+| 功能 | 说明 |
+|------|------|
+| 列表展示 | 分页显示资产，支持搜索/筛选 |
+| 筛选条件 | 按分组、状态、是否WP、有无漏洞筛选 |
+| 批量操作 | 批量扫描、批量删除 |
+| 导入入口 | 上传 TXT/CSV 文件导入 |
+| 导出 | 导出为 CSV/JSON |
+
+### 3. 扫描详情
+
+展示单个目标的扫描结果：
+- 基本信息：URL、域名、是否 WP、WP 版本、CF 状态
+- 插件列表：slug、版本、关联漏洞数
+- 主题列表：slug、版本
+- 漏洞列表：漏洞名称、严重性、关联 POC（可点击执行）
+
+### 4. POC 执行界面
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  POC 批量执行                                                │
+├─────────────────────────────────────────────────────────────┤
+│  选择 POC:  [Elementor RCE CVE-2024-XXXX    ▼]              │
+│  目标范围:  ○ 所有匹配资产 (1,523 个)                        │
+│             ○ 指定分组: [选择分组 ▼]                         │
+│             ○ 手动选择                                       │
+│                                                             │
+│  预计目标: 1,523 个资产包含 Elementor < 3.5.0               │
+│                                                             │
+│  [开始执行]                                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 实时通知机制
+
+使用 WebSocket 实现实时推送：
+
+### WebSocket 服务器
+
+```php
+<?php
+// src/WebSocket/Server.php
+
+namespace WPSan\WebSocket;
+
+use Workerman\Worker;
+
+class WsServer
+{
+    private Worker $ws;
+    private array $clients = [];
+
+    public function __construct(string $host = '0.0.0.0', int $port = 8080)
+    {
+        $this->ws = new Worker("websocket://{$host}:{$port}");
+
+        $this->ws->onConnect = function ($connection) {
+            $this->clients[$connection->id] = $connection;
+        };
+
+        $this->ws->onClose = function ($connection) {
+            unset($this->clients[$connection->id]);
+        };
+
+        $this->ws->onMessage = function ($connection, $data) {
+            $msg = json_decode($data, true);
+            if ($msg['action'] === 'subscribe') {
+                $connection->channels = $msg['channels'] ?? [];
+            }
+        };
+    }
+
+    /**
+     * 广播消息到指定频道
+     */
+    public function broadcast(string $channel, array $data): void
+    {
+        $message = json_encode([
+            'channel' => $channel,
+            'data' => $data,
+            'time' => date('Y-m-d H:i:s'),
+        ]);
+
+        foreach ($this->clients as $client) {
+            if (in_array($channel, $client->channels ?? [])) {
+                $client->send($message);
+            }
+        }
+    }
+
+    public function run(): void
+    {
+        Worker::runAll();
+    }
+}
+```
+
+### 通知频道
+
+| 频道 | 用途 | 推送内容 |
+|------|------|----------|
+| `scan:progress` | 扫描进度 | 当前扫描阶段、已完成数、队列数 |
+| `scan:complete` | 扫描完成 | 单个目标扫描完成 |
+| `vuln:found` | 发现漏洞 | 目标URL、漏洞信息、严重性 |
+| `poc:result` | POC 结果 | POC 执行结果、是否存在漏洞 |
+| `import:progress` | 导入进度 | 已处理、有效、重复、无效数量 |
+
+### 前端订阅
+
+```javascript
+// public/assets/js/websocket.js
+
+const ws = new WebSocket('ws://localhost:8080');
+
+ws.onopen = () => {
+    // 订阅感兴趣的频道
+    ws.send(JSON.stringify({
+        action: 'subscribe',
+        channels: ['scan:progress', 'vuln:found', 'poc:result']
+    }));
+};
+
+ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    switch (msg.channel) {
+        case 'vuln:found':
+            // 显示漏洞发现通知
+            showNotification('发现漏洞', `${msg.data.target} - ${msg.data.vuln_name}`, 'danger');
+            // 更新仪表盘统计
+            updateDashboardStats();
+            break;
+
+        case 'scan:progress':
+            // 更新扫描进度条
+            updateScanProgress(msg.data);
+            break;
+
+        case 'poc:result':
+            // 更新 POC 执行结果表格
+            appendPocResult(msg.data);
+            break;
+    }
+};
+```
+
+---
+
+## 数据导出功能
+
+### 导出格式
+
+支持 **CSV** 和 **JSON** 两种格式。
+
+### 导出内容
+
+| 导出类型 | 包含字段 |
+|----------|----------|
+| 资产列表 | URL, 域名, 分组, 是否WP, WP版本, 漏洞数, 最后扫描时间 |
+| 扫描结果 | URL, 插件列表, 主题列表, 漏洞列表 |
+| 漏洞报告 | URL, 漏洞名称, CVE, 严重性, 插件/主题, 版本, 发现时间 |
+| POC 结果 | URL, POC名称, 是否存在, 证据, 执行时间 |
+
+### 导出 API
+
+```php
+<?php
+// src/Api/ExportApi.php
+
+namespace WPSan\Api;
+
+class ExportApi
+{
+    /**
+     * 导出资产列表
+     * GET /api/export/targets?format=csv&group_id=1&is_wordpress=1
+     */
+    public function exportTargets(array $params): void
+    {
+        $format = $params['format'] ?? 'csv';
+        $filters = [
+            'group_id' => $params['group_id'] ?? null,
+            'is_wordpress' => $params['is_wordpress'] ?? null,
+            'has_vuln' => $params['has_vuln'] ?? null,
+        ];
+
+        $targets = $this->getFilteredTargets($filters);
+
+        if ($format === 'csv') {
+            $this->outputCsv($targets, 'targets_export.csv');
+        } else {
+            $this->outputJson($targets, 'targets_export.json');
+        }
+    }
+
+    /**
+     * 导出漏洞报告
+     * GET /api/export/vulnerabilities?format=csv&severity=critical,high
+     */
+    public function exportVulnerabilities(array $params): void
+    {
+        $format = $params['format'] ?? 'csv';
+        $severities = isset($params['severity']) ? explode(',', $params['severity']) : null;
+
+        $vulns = $this->getVulnerabilityReport($severities);
+
+        $filename = 'vuln_report_' . date('Ymd_His');
+        if ($format === 'csv') {
+            $this->outputCsv($vulns, $filename . '.csv');
+        } else {
+            $this->outputJson($vulns, $filename . '.json');
+        }
+    }
+
+    private function outputCsv(array $data, string $filename): void
+    {
+        header('Content-Type: text/csv; charset=utf-8');
+        header("Content-Disposition: attachment; filename=\"{$filename}\"");
+
+        $output = fopen('php://output', 'w');
+
+        // BOM for Excel UTF-8 support
+        fwrite($output, "\xEF\xBB\xBF");
+
+        // Header row
+        if (!empty($data)) {
+            fputcsv($output, array_keys($data[0]));
+        }
+
+        // Data rows
+        foreach ($data as $row) {
+            fputcsv($output, $row);
+        }
+
+        fclose($output);
+        exit;
+    }
+
+    private function outputJson(array $data, string $filename): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header("Content-Disposition: attachment; filename=\"{$filename}\"");
+
+        echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+```
+
+---
+
+## 操作日志
+
+记录所有重要操作，便于审计追踪。
+
+### 日志表结构
+
+```sql
+CREATE TABLE operation_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  action VARCHAR(50) NOT NULL,          -- 操作类型
+  target_type VARCHAR(50),              -- 操作对象类型
+  target_id VARCHAR(100),               -- 操作对象 ID
+  detail JSON,                          -- 详细信息
+  ip VARCHAR(45),                       -- 操作者 IP
+  user_agent VARCHAR(500),              -- 浏览器信息
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  KEY idx_logs_action (action),
+  KEY idx_logs_created (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+### 记录的操作类型
+
+| 操作类型 | 说明 |
+|----------|------|
+| `target.import` | 导入资产 |
+| `target.delete` | 删除资产 |
+| `target.batch_delete` | 批量删除资产 |
+| `scan.start` | 开始扫描 |
+| `scan.batch_start` | 批量扫描 |
+| `poc.execute` | 执行 POC |
+| `poc.batch_execute` | 批量执行 POC |
+| `vuln.create` | 添加漏洞 |
+| `vuln.update` | 更新漏洞 |
+| `vuln.delete` | 删除漏洞 |
+| `export.targets` | 导出资产 |
+| `export.vulns` | 导出漏洞报告 |
+
+### 日志服务
+
+```php
+<?php
+// src/Core/Logger.php
+
+namespace WPSan\Core;
+
+class OperationLogger
+{
+    private \PDO $db;
+
+    public function log(
+        string $action,
+        ?string $targetType = null,
+        ?string $targetId = null,
+        array $detail = []
+    ): void {
+        $stmt = $this->db->prepare('
+            INSERT INTO operation_logs (action, target_type, target_id, detail, ip, user_agent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
+        ');
+
+        $stmt->execute([
+            $action,
+            $targetType,
+            $targetId,
+            json_encode($detail, JSON_UNESCAPED_UNICODE),
+            $_SERVER['REMOTE_ADDR'] ?? 'cli',
+            $_SERVER['HTTP_USER_AGENT'] ?? 'cli',
+        ]);
+    }
+
+    /**
+     * 查询日志
+     */
+    public function query(array $filters = [], int $page = 1, int $perPage = 50): array
+    {
+        $where = ['1=1'];
+        $params = [];
+
+        if (!empty($filters['action'])) {
+            $where[] = 'action = ?';
+            $params[] = $filters['action'];
+        }
+
+        if (!empty($filters['start_date'])) {
+            $where[] = 'created_at >= ?';
+            $params[] = $filters['start_date'];
+        }
+
+        if (!empty($filters['end_date'])) {
+            $where[] = 'created_at <= ?';
+            $params[] = $filters['end_date'];
+        }
+
+        $offset = ($page - 1) * $perPage;
+        $sql = 'SELECT * FROM operation_logs WHERE ' . implode(' AND ', $where)
+             . ' ORDER BY created_at DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+}
+```
+
+### 日志页面
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  操作日志                                                   [导出] [刷新]   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  筛选: [操作类型 ▼] [开始日期] [结束日期] [搜索]                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  时间                 │ 操作类型      │ 对象         │ 详情          │ IP    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  2024-01-15 10:30:00 │ poc.execute   │ POC: xxx     │ 执行1523个目标 │ 192.. │
+│  2024-01-15 10:25:00 │ scan.start    │ Group: test  │ 开始扫描5000个 │ 192.. │
+│  2024-01-15 10:20:00 │ target.import │ Job: abc123  │ 导入50000条    │ 192.. │
+│  ...                                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
