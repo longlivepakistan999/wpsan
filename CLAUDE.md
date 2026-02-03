@@ -7,7 +7,7 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 ### 设计原则
 
 1. **无入侵检测** - 所有探测均基于被动信息收集，不对目标系统造成任何破坏
-2. **渐进式扫描** - 按顺序逐步深入：识别CMS → 检测WAF → 版本探测 → 资产枚举 → 漏洞匹配
+2. **渐进式扫描** - 按顺序逐步深入：识别CMS → 检测CDN → 版本探测 → 解析资产 → 漏洞匹配
 3. **POC 可扩展** - 插件式 POC 架构，支持动态加载和热更新
 4. **分布式架构** - 支持多节点部署，任务调度和负载均衡
 5. **商业友好** - 模块化设计，支持许可证管理和定价策略
@@ -31,7 +31,7 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
             │ 是                                   ▼
             ▼                              ┌──────────────┐
      ┌──────────────┐                      │  非WP站点    │
-     │ 检测 CF/WAF  │                      │  结束扫描    │
+     │ 检测 CF (IP) │                      │  结束扫描    │
      └──────┬───────┘                      └──────────────┘
             │
             ▼
@@ -40,14 +40,9 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
      └──────┬───────┘
             │
             ▼
-     ┌──────────────┐
-     │ 枚举所有插件  │
-     └──────┬───────┘
-            │
-            ▼
-     ┌──────────────┐
-     │ 枚举所有主题  │
-     └──────┬───────┘
+     ┌──────────────────────┐
+     │ 解析插件/主题 (JSON)  │ ◄─── 从页面/REST API 提取
+     └──────┬───────────────┘
             │
             ▼
      ┌──────────────┐
@@ -80,14 +75,13 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 | 阶段 | 名称 | 描述 | 输出 |
 |------|------|------|------|
 | 1 | WordPress 识别 | 判断目标是否为 WordPress | `isWordPress: boolean` |
-| 2 | WAF/CDN 检测 | 检测 Cloudflare、Sucuri 等 | `waf: { type, detected }` |
+| 2 | Cloudflare 检测 | 通过 IP 段判断是否使用 CF | `cloudflare: { detected, ip }` |
 | 3 | 版本检测 | 检测 WordPress 核心版本 | `version: string` |
-| 4 | 插件枚举 | 发现所有已安装插件 | `plugins: [{ slug, name }]` |
-| 5 | 主题枚举 | 发现所有已安装主题 | `themes: [{ slug, name }]` |
-| 6 | 插件版本检测 | 检测每个插件的版本 | `plugins: [{ slug, version }]` |
-| 7 | 主题版本检测 | 检测每个主题的版本 | `themes: [{ slug, version }]` |
-| 8 | 漏洞匹配 | 根据版本匹配漏洞库 | `vulnerabilities: [{ cve, poc }]` |
-| 9 | POC 验证 | 用户触发，验证漏洞 | `{ vulnerable, evidence }` |
+| 4 | 资产解析 | 从 JSON/HTML 解析插件和主题 | `plugins[], themes[]` |
+| 5 | 插件版本检测 | 检测每个插件的版本 | `plugins: [{ slug, version }]` |
+| 6 | 主题版本检测 | 检测每个主题的版本 | `themes: [{ slug, version }]` |
+| 7 | 漏洞匹配 | 根据版本匹配漏洞库 | `vulnerabilities: [{ cve, poc }]` |
+| 8 | POC 验证 | 用户触发，验证漏洞 | `{ vulnerable, evidence }` |
 
 ---
 
@@ -107,33 +101,24 @@ wpsan/
 │   │   │   ├── detector.ts      # 主检测器
 │   │   │   └── signatures.ts    # WP 特征签名
 │   │   │
-│   │   ├── 02-waf/              # Step 2: WAF/CDN 检测
-│   │   │   ├── detector.ts
-│   │   │   ├── cloudflare.ts    # Cloudflare 检测
-│   │   │   ├── sucuri.ts        # Sucuri 检测
-│   │   │   ├── wordfence.ts     # Wordfence 检测
-│   │   │   └── generic.ts       # 通用 WAF 检测
+│   │   ├── 02-cloudflare/       # Step 2: Cloudflare 检测 (IP段)
+│   │   │   ├── detector.ts      # 检测器
+│   │   │   └── ip-ranges.ts     # IP 段管理
 │   │   │
 │   │   ├── 03-version/          # Step 3: WordPress 版本
 │   │   │   ├── detector.ts
 │   │   │   └── methods/         # 各种版本检测方法
 │   │   │
-│   │   ├── 04-plugins/          # Step 4: 插件枚举
-│   │   │   ├── enumerator.ts    # 插件枚举器
-│   │   │   ├── passive.ts       # 被动枚举（源码分析）
-│   │   │   ├── aggressive.ts    # 主动枚举（路径探测）
-│   │   │   └── wordlist.ts      # 字典管理
+│   │   ├── 04-assets/           # Step 4: 资产解析（插件/主题）
+│   │   │   ├── parser.ts        # JSON/HTML 解析器
+│   │   │   ├── plugin-parser.ts # 插件解析
+│   │   │   └── theme-parser.ts  # 主题解析
 │   │   │
-│   │   ├── 05-themes/           # Step 5: 主题枚举
-│   │   │   ├── enumerator.ts
-│   │   │   ├── passive.ts
-│   │   │   └── aggressive.ts
-│   │   │
-│   │   ├── 06-plugin-version/   # Step 6: 插件版本检测
+│   │   ├── 05-plugin-version/   # Step 5: 插件版本检测
 │   │   │   ├── detector.ts
 │   │   │   └── extractors/      # 版本提取器
 │   │   │
-│   │   └── 07-theme-version/    # Step 7: 主题版本检测
+│   │   └── 06-theme-version/    # Step 6: 主题版本检测
 │   │       ├── detector.ts
 │   │       └── extractors/
 │   │
@@ -179,14 +164,13 @@ wpsan/
 │   └── utils/
 │       ├── logger.ts
 │       ├── cache.ts
+│       ├── ip-utils.ts          # IP 地址工具
 │       └── config.ts
 │
 ├── data/
-│   ├── wordlists/               # 枚举字典
-│   │   ├── plugins-popular.txt  # 热门插件 (~1000)
-│   │   ├── plugins-full.txt     # 完整插件 (~100000)
-│   │   ├── themes-popular.txt
-│   │   └── themes-full.txt
+│   ├── cloudflare/              # Cloudflare IP 段
+│   │   ├── ips-v4.txt           # IPv4 段 (定期从 CF 更新)
+│   │   └── ips-v6.txt           # IPv6 段
 │   └── vulndb/                  # 漏洞数据库
 │
 ├── poc-modules/                 # 外部 POC 模块（可扩展）
@@ -195,6 +179,8 @@ wpsan/
 ├── tests/
 ├── docs/
 ├── scripts/
+│   ├── update-cf-ips.ts         # 更新 Cloudflare IP 段
+│   └── ...
 ├── package.json
 ├── tsconfig.json
 └── docker-compose.yml           # 分布式部署配置
@@ -261,42 +247,116 @@ const WP_INDICATORS = [
 const CONFIDENCE_THRESHOLD = 60;
 ```
 
-### 2. WAF/CDN 检测
+### 2. Cloudflare 检测 (IP 段判断)
 
 ```typescript
-// src/detectors/02-waf/detector.ts
+// src/detectors/02-cloudflare/detector.ts
 
-interface IWafDetectionResult {
+import { isIpInCidr } from '../utils/ip-utils.js';
+
+interface ICloudflareDetectionResult {
   detected: boolean;
-  type: 'cloudflare' | 'sucuri' | 'wordfence' | 'akamai' | 'incapsula' | 'generic' | null;
-  details: {
-    bypassPossible: boolean;
-    realIp?: string;         // 如果能获取真实 IP
-    notes: string[];
-  };
+  ip: string;                // 目标站点解析的 IP
+  matchedRange?: string;     // 匹配的 CIDR 段
 }
 
-// Cloudflare 检测
-const CLOUDFLARE_INDICATORS = {
-  headers: ['cf-ray', 'cf-cache-status', 'cf-request-id'],
-  cookies: ['__cfduid', '__cf_bm'],
-  serverHeader: /cloudflare/i,
-  errorPage: /cloudflare|cf-error/i,
-  ipRanges: ['173.245.48.0/20', '103.21.244.0/22', ...],  // CF IP 段
+// Cloudflare IP 段数据源
+const CF_IP_SOURCES = {
+  ipv4: 'https://www.cloudflare.com/ips-v4',
+  ipv6: 'https://www.cloudflare.com/ips-v6',
 };
 
-// Sucuri 检测
-const SUCURI_INDICATORS = {
-  headers: ['x-sucuri-id', 'x-sucuri-cache'],
-  serverHeader: /Sucuri/i,
-  cookies: ['sucuri_'],
-};
+// 本地缓存的 IP 段 (定期更新)
+// data/cloudflare/ips-v4.txt
+// data/cloudflare/ips-v6.txt
 
-// Wordfence 检测
-const WORDFENCE_INDICATORS = {
-  cookies: ['wfvt_', 'wordfence_'],
-  blockPage: /wordfence|wf-blocked/i,
-};
+class CloudflareDetector {
+  private ipv4Ranges: string[] = [];
+  private ipv6Ranges: string[] = [];
+
+  // 加载 IP 段
+  async loadIpRanges(): Promise<void> {
+    this.ipv4Ranges = await this.readIpFile('data/cloudflare/ips-v4.txt');
+    this.ipv6Ranges = await this.readIpFile('data/cloudflare/ips-v6.txt');
+  }
+
+  // 从远程更新 IP 段
+  async updateFromRemote(): Promise<void> {
+    const [ipv4Response, ipv6Response] = await Promise.all([
+      fetch(CF_IP_SOURCES.ipv4),
+      fetch(CF_IP_SOURCES.ipv6),
+    ]);
+
+    const ipv4 = await ipv4Response.text();
+    const ipv6 = await ipv6Response.text();
+
+    await fs.writeFile('data/cloudflare/ips-v4.txt', ipv4.trim());
+    await fs.writeFile('data/cloudflare/ips-v6.txt', ipv6.trim());
+
+    this.ipv4Ranges = ipv4.trim().split('\n');
+    this.ipv6Ranges = ipv6.trim().split('\n');
+  }
+
+  // 检测目标是否使用 Cloudflare
+  async detect(target: string): Promise<ICloudflareDetectionResult> {
+    // 1. 解析目标域名的 IP
+    const hostname = new URL(target).hostname;
+    const ip = await dns.resolve4(hostname).catch(() => null)
+              || await dns.resolve6(hostname).catch(() => null);
+
+    if (!ip || ip.length === 0) {
+      return { detected: false, ip: 'unknown' };
+    }
+
+    const targetIp = ip[0];
+
+    // 2. 判断 IP 是否在 Cloudflare 段内
+    const ranges = targetIp.includes(':') ? this.ipv6Ranges : this.ipv4Ranges;
+
+    for (const cidr of ranges) {
+      if (isIpInCidr(targetIp, cidr)) {
+        return {
+          detected: true,
+          ip: targetIp,
+          matchedRange: cidr,
+        };
+      }
+    }
+
+    return { detected: false, ip: targetIp };
+  }
+}
+
+// src/utils/ip-utils.ts
+
+import { isInSubnet } from 'is-in-subnet';
+
+export function isIpInCidr(ip: string, cidr: string): boolean {
+  return isInSubnet(ip, cidr);
+}
+```
+
+**Cloudflare IP 段更新脚本：**
+
+```typescript
+// scripts/update-cf-ips.ts
+
+async function updateCloudflareIps() {
+  console.log('Fetching Cloudflare IP ranges...');
+
+  const [ipv4, ipv6] = await Promise.all([
+    fetch('https://www.cloudflare.com/ips-v4').then(r => r.text()),
+    fetch('https://www.cloudflare.com/ips-v6').then(r => r.text()),
+  ]);
+
+  await fs.writeFile('data/cloudflare/ips-v4.txt', ipv4.trim());
+  await fs.writeFile('data/cloudflare/ips-v6.txt', ipv6.trim());
+
+  console.log(`Updated: ${ipv4.trim().split('\n').length} IPv4 ranges`);
+  console.log(`Updated: ${ipv6.trim().split('\n').length} IPv6 ranges`);
+}
+
+updateCloudflareIps();
 ```
 
 ### 3. WordPress 版本检测
@@ -366,80 +426,139 @@ const VERSION_METHODS = [
     },
     confidence: 70,
   },
-  {
-    name: 'hash_compare',
-    files: [
-      '/wp-includes/version.php',
-      '/wp-includes/css/admin-bar.min.css',
-    ],
-    database: 'version_hashes.json',
-    confidence: 99,
-  },
 ];
 ```
 
-### 4. 插件枚举
+### 4. 资产解析（插件/主题从 JSON 获取）
 
 ```typescript
-// src/detectors/04-plugins/enumerator.ts
+// src/detectors/04-assets/parser.ts
 
-interface IPlugin {
+interface IAsset {
+  type: 'plugin' | 'theme';
   slug: string;
   name?: string;
-  detected: boolean;
-  method: 'passive' | 'aggressive';
+  version?: string;          // 可能在这一步就能获取到
+  source: string;            // 数据来源
 }
 
-// 被动枚举：从页面源码提取
-async function passiveEnumeration(html: string): Promise<IPlugin[]> {
-  const plugins: IPlugin[] = [];
+interface IAssetsResult {
+  plugins: IAsset[];
+  themes: IAsset[];
+}
 
-  // 从 wp-content/plugins/ 路径提取
-  const pluginPaths = html.matchAll(/wp-content\/plugins\/([^\/'"]+)/g);
-  for (const match of pluginPaths) {
-    plugins.push({ slug: match[1], detected: true, method: 'passive' });
+class AssetParser {
+  // 从多个来源解析资产
+  async parse(target: string, html: string): Promise<IAssetsResult> {
+    const results: IAssetsResult = { plugins: [], themes: [] };
+
+    // 方法 1: 从 REST API 获取 (/wp-json/)
+    const apiAssets = await this.parseFromRestApi(target);
+    this.mergeAssets(results, apiAssets);
+
+    // 方法 2: 从 HTML 源码解析
+    const htmlAssets = this.parseFromHtml(html);
+    this.mergeAssets(results, htmlAssets);
+
+    return results;
   }
 
-  return [...new Set(plugins)];
-}
+  // 从 REST API 解析
+  private async parseFromRestApi(target: string): Promise<IAssetsResult> {
+    const results: IAssetsResult = { plugins: [], themes: [] };
 
-// 主动枚举：字典探测
-async function aggressiveEnumeration(
-  target: string,
-  wordlist: string[],
-  concurrency: number = 10
-): Promise<IPlugin[]> {
-  const plugins: IPlugin[] = [];
+    try {
+      // 尝试获取 /wp-json/ 根端点
+      const response = await httpClient.get(`${target}/wp-json/`);
+      const json = JSON.parse(response.body);
 
-  // 探测路径
-  const paths = [
-    '/wp-content/plugins/{slug}/readme.txt',
-    '/wp-content/plugins/{slug}/',
-  ];
+      // 解析 namespaces 中的插件信息
+      // 例如: "wc/v3" => WooCommerce, "jetpack/v4" => Jetpack
+      if (json.namespaces) {
+        for (const ns of json.namespaces) {
+          const plugin = this.namespaceToPlugin(ns);
+          if (plugin) {
+            results.plugins.push({
+              type: 'plugin',
+              slug: plugin.slug,
+              name: plugin.name,
+              source: 'rest_api_namespace',
+            });
+          }
+        }
+      }
 
-  // 并发探测
-  for (const slug of wordlist) {
-    for (const pathTemplate of paths) {
-      const path = pathTemplate.replace('{slug}', slug);
-      const response = await httpClient.head(target + path);
+      // 解析 authentication 中的插件信息
+      if (json.authentication) {
+        // ...
+      }
+    } catch (e) {
+      // REST API 不可用，忽略
+    }
 
-      if (response.status === 200) {
-        plugins.push({ slug, detected: true, method: 'aggressive' });
-        break;  // 找到就跳过该插件的其他路径
+    return results;
+  }
+
+  // 从 HTML 源码解析
+  private parseFromHtml(html: string): IAssetsResult {
+    const results: IAssetsResult = { plugins: [], themes: [] };
+
+    // 提取插件路径: /wp-content/plugins/{slug}/
+    const pluginMatches = html.matchAll(/wp-content\/plugins\/([a-z0-9_-]+)\//gi);
+    for (const match of pluginMatches) {
+      const slug = match[1];
+      if (!results.plugins.find(p => p.slug === slug)) {
+        results.plugins.push({
+          type: 'plugin',
+          slug,
+          source: 'html_path',
+        });
       }
     }
+
+    // 提取主题路径: /wp-content/themes/{slug}/
+    const themeMatches = html.matchAll(/wp-content\/themes\/([a-z0-9_-]+)\//gi);
+    for (const match of themeMatches) {
+      const slug = match[1];
+      if (!results.themes.find(t => t.slug === slug)) {
+        results.themes.push({
+          type: 'theme',
+          slug,
+          source: 'html_path',
+        });
+      }
+    }
+
+    return results;
   }
 
-  return plugins;
+  // 命名空间到插件的映射
+  private namespaceToPlugin(namespace: string): { slug: string; name: string } | null {
+    const mapping: Record<string, { slug: string; name: string }> = {
+      'wc': { slug: 'woocommerce', name: 'WooCommerce' },
+      'jetpack': { slug: 'jetpack', name: 'Jetpack' },
+      'yoast': { slug: 'wordpress-seo', name: 'Yoast SEO' },
+      'contact-form-7': { slug: 'contact-form-7', name: 'Contact Form 7' },
+      'elementor': { slug: 'elementor', name: 'Elementor' },
+      'wpforms': { slug: 'wpforms-lite', name: 'WPForms' },
+      'acf': { slug: 'advanced-custom-fields', name: 'Advanced Custom Fields' },
+      // 更多映射...
+    };
+
+    const prefix = namespace.split('/')[0];
+    return mapping[prefix] || null;
+  }
 }
 ```
 
 ### 5. 插件版本检测
 
 ```typescript
-// src/detectors/06-plugin-version/detector.ts
+// src/detectors/05-plugin-version/detector.ts
 
-interface IPluginWithVersion extends IPlugin {
+interface IPluginWithVersion {
+  slug: string;
+  name?: string;
   version: string | null;
   versionSource: string;     // 版本来源
 }
@@ -465,7 +584,13 @@ const VERSION_SOURCES = [
   {
     name: 'package.json',
     path: '/wp-content/plugins/{slug}/package.json',
-    extract: (json: string) => JSON.parse(json).version,
+    extract: (json: string) => {
+      try {
+        return JSON.parse(json).version;
+      } catch {
+        return null;
+      }
+    },
   },
   {
     name: 'changelog',
@@ -476,6 +601,61 @@ const VERSION_SOURCES = [
     ],
   },
 ];
+
+class PluginVersionDetector {
+  async detect(target: string, plugins: IAsset[]): Promise<IPluginWithVersion[]> {
+    const results: IPluginWithVersion[] = [];
+
+    for (const plugin of plugins) {
+      const version = await this.detectPluginVersion(target, plugin.slug);
+      results.push({
+        slug: plugin.slug,
+        name: plugin.name,
+        version: version?.version || null,
+        versionSource: version?.source || 'unknown',
+      });
+    }
+
+    return results;
+  }
+
+  private async detectPluginVersion(
+    target: string,
+    slug: string
+  ): Promise<{ version: string; source: string } | null> {
+    for (const source of VERSION_SOURCES) {
+      const path = source.path.replace('{slug}', slug);
+      const url = `${target}${path}`;
+
+      try {
+        const response = await httpClient.get(url);
+        if (response.status !== 200) continue;
+
+        // 使用自定义提取函数
+        if (source.extract) {
+          const version = source.extract(response.body);
+          if (version) {
+            return { version, source: source.name };
+          }
+        }
+
+        // 使用正则模式匹配
+        if (source.patterns) {
+          for (const pattern of source.patterns) {
+            const match = response.body.match(pattern);
+            if (match?.[1]) {
+              return { version: match[1], source: source.name };
+            }
+          }
+        }
+      } catch {
+        // 忽略请求错误
+      }
+    }
+
+    return null;
+  }
+}
 ```
 
 ### 6. POC 可扩展架构
@@ -499,6 +679,20 @@ export abstract class BasePoc {
 
   // 验证方法（子类实现）
   abstract verify(context: IPocContext): Promise<IPocResult>;
+}
+
+// POC 上下文
+interface IPocContext {
+  target: string;
+  http: HttpClient;
+  scanResult: IScanResult;    // 当前扫描结果
+}
+
+// POC 结果
+interface IPocResult {
+  vulnerable: boolean;
+  evidence?: string;          // 漏洞证据
+  details?: Record<string, unknown>;
 }
 
 // src/poc/registry.ts - POC 注册表
@@ -531,8 +725,12 @@ class PocRegistry {
     }
   }
 }
+```
 
-// src/poc/modules/plugins/elementor/CVE-2024-XXXX.poc.ts - POC 示例
+**POC 示例：**
+
+```typescript
+// src/poc/modules/plugins/elementor/CVE-2024-XXXX.poc.ts
 
 export default class ElementorRcePoc extends BasePoc {
   readonly id = 'elementor-rce-2024-xxxx';
@@ -548,15 +746,18 @@ export default class ElementorRcePoc extends BasePoc {
   };
 
   async verify(context: IPocContext): Promise<IPocResult> {
-    // 构造验证请求
-    const payload = '...';
+    // 构造验证请求（仅验证，不利用）
     const response = await context.http.post(
       `${context.target}/wp-admin/admin-ajax.php`,
-      { action: 'elementor_...' , data: payload }
+      {
+        body: new URLSearchParams({
+          action: 'elementor_test_action',
+        }),
+      }
     );
 
     // 判断漏洞是否存在
-    const vulnerable = response.body.includes('specific_indicator');
+    const vulnerable = response.body.includes('specific_vulnerable_indicator');
 
     return {
       vulnerable,
@@ -578,7 +779,7 @@ interface IScanResult {
 
   // 各阶段结果
   wordpress: IWordPressDetectionResult;
-  waf: IWafDetectionResult;
+  cloudflare: ICloudflareDetectionResult;
   version: IVersionDetectionResult;
   plugins: IPluginWithVersion[];
   themes: IThemeWithVersion[];
@@ -601,15 +802,11 @@ interface IPocInfo {
   id: string;
   name: string;
   severity: string;
-  canRun: boolean;                    // 是否可执行
+  canRun: boolean;                    // 是否可执行（无条件）
 }
 
-// API: 获取扫描结果
-// GET /api/v1/scans/:scanId
-// Response: IScanResult
-
 // API: 执行 POC
-// POST /api/v1/scans/:scanId/poc/:pocId/run
+// POST /api/v1/scans/:scanId/pocs/:pocId/run
 // Response: IPocResult
 ```
 
@@ -674,12 +871,10 @@ const scanQueue = new Queue('scan-tasks', { connection: redis });
 
 // 任务类型
 interface IScanJob {
-  type: 'full_scan' | 'plugin_enum' | 'poc_verify';
+  type: 'full_scan' | 'poc_verify';
   target: string;
   options: {
-    stages?: string[];        // 指定执行的阶段
     pocId?: string;           // POC 验证时的 POC ID
-    pluginSlug?: string;      // 特定插件扫描
   };
   priority: number;           // 优先级
   userId: string;
@@ -691,54 +886,29 @@ const worker = new Worker('scan-tasks', async (job: Job<IScanJob>) => {
 
   switch (type) {
     case 'full_scan':
-      return await runFullScan(target, options);
-    case 'plugin_enum':
-      return await runPluginEnumeration(target, options);
+      return await runFullScan(target, options, job);
     case 'poc_verify':
       return await runPocVerification(target, options);
   }
 }, { connection: redis, concurrency: 5 });
 
 // 任务进度上报
-worker.on('progress', (job, progress) => {
-  // 通过 WebSocket 推送进度
-  wsServer.broadcast(`scan:${job.id}`, { progress });
-});
+async function runFullScan(target: string, options: any, job: Job) {
+  await job.updateProgress({ stage: 'wordpress', status: 'running' });
+  const wpResult = await wordpressDetector.detect(target);
+
+  await job.updateProgress({ stage: 'cloudflare', status: 'running' });
+  const cfResult = await cloudflareDetector.detect(target);
+
+  // ... 继续执行其他阶段
+}
 ```
 
 ### Worker 扩展
 
-```typescript
-// src/distributed/worker.ts
-
-class ScanWorker {
-  private id: string;
-  private status: 'idle' | 'busy' | 'offline';
-  private currentJob: Job | null;
-
-  constructor() {
-    this.id = generateWorkerId();
-    this.registerWithMaster();
-  }
-
-  // 向 Master 注册
-  async registerWithMaster(): Promise<void> {
-    await redis.hset('workers', this.id, JSON.stringify({
-      status: 'idle',
-      registeredAt: Date.now(),
-      capabilities: ['scan', 'poc'],
-    }));
-  }
-
-  // 心跳
-  async heartbeat(): Promise<void> {
-    await redis.hset('workers', this.id, JSON.stringify({
-      status: this.status,
-      lastHeartbeat: Date.now(),
-      currentJob: this.currentJob?.id,
-    }));
-  }
-}
+```bash
+# 手动扩展 Worker 数量
+docker-compose up -d --scale worker=10
 ```
 
 ---
@@ -765,9 +935,10 @@ GET    /api/v1/vulns                    // 搜索漏洞库
 GET    /api/v1/vulns/:id                // 获取漏洞详情
 POST   /api/v1/vulns/sync               // 同步漏洞库
 
-// 系统状态
+// 系统
 GET    /api/v1/system/workers           // 获取 Worker 状态
 GET    /api/v1/system/stats             // 获取系统统计
+POST   /api/v1/system/cf-ips/update     // 更新 Cloudflare IP 段
 ```
 
 ### WebSocket 事件
@@ -777,12 +948,13 @@ GET    /api/v1/system/stats             // 获取系统统计
 ws.subscribe(`scan:${scanId}`);
 
 // 服务端推送事件
-ws.emit('scan:stage', { stage: 'plugins', status: 'running' });
+ws.emit('scan:stage', { stage: 'cloudflare', status: 'running' });
+ws.emit('scan:cloudflare', { detected: true, ip: '104.21.xx.xx' });
 ws.emit('scan:plugin_found', { slug: 'woocommerce', version: '8.0.0' });
-ws.emit('scan:vulnerability', { cve: 'CVE-2024-xxx', severity: 'high' });
+ws.emit('scan:vulnerability', { cve: 'CVE-2024-xxx', severity: 'high', pocs: [...] });
 ws.emit('scan:complete', { summary: {...} });
 
-// POC 执行进度
+// POC 执行
 ws.emit('poc:started', { pocId: '...' });
 ws.emit('poc:result', { pocId: '...', vulnerable: true, evidence: '...' });
 ```
@@ -791,97 +963,97 @@ ws.emit('poc:result', { pocId: '...', vulnerable: true, evidence: '...' });
 
 ## 数据模型
 
-### 扫描结果
+### PostgreSQL Schema
 
-```typescript
-// PostgreSQL Schema
+```sql
+-- 扫描记录
+CREATE TABLE scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  target VARCHAR(500) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending, running, completed, failed
 
-interface Scan {
-  id: string;
-  target: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  -- 检测结果
+  is_wordpress BOOLEAN,
+  wp_version VARCHAR(20),
+  cloudflare_detected BOOLEAN,
+  cloudflare_ip VARCHAR(45),
 
-  // 扫描结果
-  isWordPress: boolean;
-  wpVersion: string | null;
-  wafDetected: boolean;
-  wafType: string | null;
+  -- 时间戳
+  created_at TIMESTAMP DEFAULT NOW(),
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
 
-  // 时间戳
-  createdAt: Date;
-  startedAt: Date | null;
-  completedAt: Date | null;
+  -- 关联
+  user_id UUID REFERENCES users(id)
+);
 
-  // 关联
-  userId: string;
-}
+-- 扫描发现的插件
+CREATE TABLE scan_plugins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
+  slug VARCHAR(100) NOT NULL,
+  name VARCHAR(200),
+  version VARCHAR(20),
+  version_source VARCHAR(50)
+);
 
-interface ScanPlugin {
-  id: string;
-  scanId: string;
-  slug: string;
-  name: string | null;
-  version: string | null;
-  detectionMethod: string;
-}
+-- 扫描发现的主题
+CREATE TABLE scan_themes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
+  slug VARCHAR(100) NOT NULL,
+  name VARCHAR(200),
+  version VARCHAR(20)
+);
 
-interface ScanTheme {
-  id: string;
-  scanId: string;
-  slug: string;
-  name: string | null;
-  version: string | null;
-}
+-- 扫描匹配的漏洞
+CREATE TABLE scan_vulnerabilities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
+  vuln_id VARCHAR(50) NOT NULL,  -- 关联漏洞库
+  component_type VARCHAR(20) NOT NULL,  -- core, plugin, theme
+  component_slug VARCHAR(100),
+  component_version VARCHAR(20)
+);
 
-interface ScanVulnerability {
-  id: string;
-  scanId: string;
-  vulnId: string;           // 关联漏洞库
-  componentType: string;
-  componentSlug: string;
-  componentVersion: string;
-}
+-- POC 执行记录
+CREATE TABLE poc_executions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scan_id UUID REFERENCES scans(id) ON DELETE CASCADE,
+  poc_id VARCHAR(100) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  vulnerable BOOLEAN,
+  evidence TEXT,
+  executed_at TIMESTAMP DEFAULT NOW()
+);
 
-interface PocExecution {
-  id: string;
-  scanId: string;
-  pocId: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
-  vulnerable: boolean | null;
-  evidence: string | null;
-  executedAt: Date;
-}
-```
+-- 漏洞库
+CREATE TABLE vulnerabilities (
+  id VARCHAR(50) PRIMARY KEY,
+  cve VARCHAR(20),
+  title VARCHAR(500) NOT NULL,
+  description TEXT,
 
-### 漏洞库
+  component_type VARCHAR(20) NOT NULL,
+  component_slug VARCHAR(100),
+  affected_versions VARCHAR(100),  -- semver range
+  fixed_version VARCHAR(20),
 
-```typescript
-interface Vulnerability {
-  id: string;
-  cve: string | null;
-  title: string;
-  description: string;
+  severity VARCHAR(20) NOT NULL,
+  cvss_score DECIMAL(3, 1),
 
-  // 影响范围
-  componentType: 'core' | 'plugin' | 'theme';
-  componentSlug: string | null;
-  affectedVersions: string;   // semver range
-  fixedVersion: string | null;
+  poc_ids TEXT[],  -- 关联的 POC ID 列表
+  references TEXT[],
 
-  // 严重性
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  cvssScore: number | null;
+  published_at TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
 
-  // POC 关联
-  pocIds: string[];
-
-  // 参考
-  references: string[];
-
-  // 时间
-  publishedAt: Date;
-  updatedAt: Date;
-}
+-- 索引
+CREATE INDEX idx_scans_user ON scans(user_id);
+CREATE INDEX idx_scans_status ON scans(status);
+CREATE INDEX idx_scan_plugins_scan ON scan_plugins(scan_id);
+CREATE INDEX idx_vulnerabilities_component ON vulnerabilities(component_type, component_slug);
 ```
 
 ---
@@ -906,6 +1078,8 @@ services:
     depends_on:
       - db
       - redis
+    volumes:
+      - ./data:/app/data  # Cloudflare IP 段等数据
 
   # Master 调度器
   master:
@@ -947,13 +1121,6 @@ volumes:
   redis_data:
 ```
 
-### 扩展 Worker
-
-```bash
-# 手动扩展 Worker 数量
-docker-compose up -d --scale worker=10
-```
-
 ---
 
 ## 开发规范
@@ -969,14 +1136,14 @@ docker-compose up -d --scale worker=10
 
 ### 目录结构约定
 
-- 检测器按执行顺序编号: `01-wordpress`, `02-waf`...
+- 检测器按执行顺序编号: `01-wordpress`, `02-cloudflare`...
 - POC 按组件类型分目录: `wordpress/`, `plugins/`, `themes/`
 - 插件 POC 再按插件 slug 分目录
 
 ### Git 提交规范
 
 ```
-feat(detector): add Cloudflare detection
+feat(detector): add Cloudflare IP detection
 fix(poc): fix false positive in elementor poc
 chore(deps): update dependencies
 docs: update API documentation
@@ -1001,6 +1168,9 @@ npm run db:migrate             # 运行迁移
 npm run db:seed                # 填充测试数据
 npm run vulndb:sync            # 同步漏洞库
 
+# Cloudflare IP 更新
+npm run cf:update              # 从 cloudflare.com 更新 IP 段
+
 # Docker
 docker-compose up -d           # 启动所有服务
 docker-compose up -d --scale worker=5  # 扩展 Worker
@@ -1016,7 +1186,9 @@ npm run poc:validate           # 验证 POC 格式
 ## 路线图
 
 ### Phase 1: MVP
-- [ ] 核心扫描流程（7 个阶段）
+- [ ] 核心扫描流程（6 个阶段）
+- [ ] Cloudflare IP 段检测
+- [ ] 资产解析（从 JSON/HTML）
 - [ ] 基础漏洞匹配
 - [ ] CLI 工具
 - [ ] 单节点运行
