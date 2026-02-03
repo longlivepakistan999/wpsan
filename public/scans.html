@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 扫描任务</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .stat-card {
+            padding: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .stat-card .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        .stat-card .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+        .stat-card .stat-label {
+            color: #6c757d;
+            font-size: 13px;
+        }
+        .filter-bar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .table th {
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 2px solid #eee;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        .table td {
+            vertical-align: middle;
+            padding: 15px 8px;
+        }
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-badge.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-badge.scanning {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .status-badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .scan-target {
+            font-weight: 500;
+            color: #1e3a5f;
+        }
+        .scan-target a {
+            text-decoration: none;
+            color: inherit;
+        }
+        .scan-target a:hover {
+            color: #0d6efd;
+        }
+        .scan-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+        .scan-stats .stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .scan-stats .stat i {
+            font-size: 14px;
+        }
+        .scan-stats .stat.plugins { color: #0d6efd; }
+        .scan-stats .stat.themes { color: #6610f2; }
+        .scan-stats .stat.vulns { color: #dc3545; }
+        .progress-sm {
+            height: 6px;
+            border-radius: 3px;
+        }
+        .batch-job {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .batch-job h6 {
+            margin-bottom: 15px;
+        }
+        .batch-progress {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            height: 10px;
+            margin-bottom: 10px;
+        }
+        .batch-progress .progress-bar {
+            background: #fff;
+            border-radius: 10px;
+        }
+        .batch-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+        .scan-time {
+            font-size: 13px;
+            color: #6c757d;
+        }
+        .running-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #0d6efd;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="targets.html">
+                    <i class="bi bi-bullseye"></i> 资产管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="scans.html">
+                    <i class="bi bi-search"></i> 扫描任务
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">扫描任务</h4>
+                <small class="text-muted">管理和监控扫描任务</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newScanModal">
+                    <i class="bi bi-play-fill"></i> 新建扫描
+                </button>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-icon" style="background: #fff3cd; color: #856404;">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">12,458</div>
+                        <div class="stat-label">待扫描</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-icon" style="background: #cce5ff; color: #004085;">
+                        <i class="bi bi-arrow-repeat"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">156</div>
+                        <div class="stat-label">扫描中</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-icon" style="background: #d4edda; color: #155724;">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">487,234</div>
+                        <div class="stat-label">已完成</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-icon" style="background: #f8d7da; color: #721c24;">
+                        <i class="bi bi-x-circle"></i>
+                    </div>
+                    <div>
+                        <div class="stat-value">152</div>
+                        <div class="stat-label">失败</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 正在进行的批量任务 -->
+        <div class="batch-job">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h6 class="mb-0"><span class="running-indicator"></span> 批量扫描进行中</h6>
+                    <small class="opacity-75">分组: 电商网站 | 开始时间: 2024-01-15 10:30:00</small>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-light me-2">
+                        <i class="bi bi-pause-fill"></i> 暂停
+                    </button>
+                    <button class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                </div>
+            </div>
+            <div class="batch-progress">
+                <div class="progress-bar" style="width: 67%"></div>
+            </div>
+            <div class="batch-stats">
+                <span>进度: 33,500 / 50,000 (67%)</span>
+                <span>WordPress: 28,450</span>
+                <span>发现漏洞: 1,234</span>
+                <span>预计剩余: 约 25 分钟</span>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有状态</option>
+                        <option value="pending">待扫描</option>
+                        <option value="scanning">扫描中</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有分组</option>
+                        <option value="1">电商网站</option>
+                        <option value="2">企业官网</option>
+                        <option value="3">博客站点</option>
+                        <option value="4">新闻门户</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">WordPress 状态</option>
+                        <option value="1">是 WordPress</option>
+                        <option value="0">非 WordPress</option>
+                        <option value="-1">未知</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="搜索 URL 或域名...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-primary w-100">筛选</button>
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-outline-secondary w-100" title="导出">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 扫描列表 -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th width="40">
+                                    <input type="checkbox" class="form-check-input">
+                                </th>
+                                <th>目标</th>
+                                <th width="100">状态</th>
+                                <th width="200">扫描结果</th>
+                                <th width="120">WP 版本</th>
+                                <th width="80">CF</th>
+                                <th width="150">扫描时间</th>
+                                <th width="100">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 扫描中 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="scan-detail.html">https://running-example.com</a>
+                                    <br><small class="text-muted">running-example.com</small>
+                                </td>
+                                <td>
+                                    <span class="status-badge scanning">
+                                        <span class="running-indicator"></span> 扫描中
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="progress progress-sm mb-1">
+                                        <div class="progress-bar" style="width: 60%"></div>
+                                    </div>
+                                    <small class="text-muted">正在检测插件版本...</small>
+                                </td>
+                                <td><span class="badge bg-secondary">检测中</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    <small>开始于 2 分钟前</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" title="停止">
+                                        <i class="bi bi-stop-fill"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 已完成 - 有漏洞 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="scan-detail.html">https://vulnerable-shop.com</a>
+                                    <br><small class="text-muted">vulnerable-shop.com</small>
+                                </td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>
+                                    <div class="scan-stats">
+                                        <span class="stat plugins"><i class="bi bi-puzzle"></i> 12</span>
+                                        <span class="stat themes"><i class="bi bi-palette"></i> 1</span>
+                                        <span class="stat vulns"><i class="bi bi-bug-fill"></i> 5</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-info">6.4.2</span></td>
+                                <td><span class="badge bg-warning text-dark">CF</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:28:45
+                                    <br><small class="text-muted">耗时 8.2s</small>
+                                </td>
+                                <td>
+                                    <a href="scan-detail.html" class="btn btn-sm btn-outline-primary" title="详情">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary" title="重新扫描">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 已完成 - WordPress 无漏洞 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="scan-detail.html">https://secure-blog.net</a>
+                                    <br><small class="text-muted">secure-blog.net</small>
+                                </td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>
+                                    <div class="scan-stats">
+                                        <span class="stat plugins"><i class="bi bi-puzzle"></i> 8</span>
+                                        <span class="stat themes"><i class="bi bi-palette"></i> 1</span>
+                                        <span class="stat vulns text-success"><i class="bi bi-shield-check"></i> 0</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-info">6.5.0</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:25:30
+                                    <br><small class="text-muted">耗时 5.4s</small>
+                                </td>
+                                <td>
+                                    <a href="scan-detail.html" class="btn btn-sm btn-outline-primary" title="详情">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary" title="重新扫描">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 已完成 - 非 WordPress -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="#">https://not-wordpress.org</a>
+                                    <br><small class="text-muted">not-wordpress.org</small>
+                                </td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>
+                                    <span class="text-muted"><i class="bi bi-dash-circle"></i> 非 WordPress 站点</span>
+                                </td>
+                                <td><span class="badge bg-secondary">N/A</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:22:15
+                                    <br><small class="text-muted">耗时 1.2s</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" title="重新扫描">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 待扫描 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="#">https://pending-site.com</a>
+                                    <br><small class="text-muted">pending-site.com</small>
+                                </td>
+                                <td><span class="status-badge pending">待扫描</span></td>
+                                <td>
+                                    <span class="text-muted">-</span>
+                                </td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    <small class="text-muted">队列中 #12,458</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" title="立即扫描">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" title="移除">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 失败 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="#">https://failed-target.io</a>
+                                    <br><small class="text-muted">failed-target.io</small>
+                                </td>
+                                <td><span class="status-badge failed">失败</span></td>
+                                <td>
+                                    <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> 连接超时</span>
+                                </td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:18:00
+                                    <br><small class="text-danger">3 次重试失败</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-warning" title="重试">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" title="删除">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- 更多已完成 -->
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="scan-detail.html">https://ecommerce-store.com</a>
+                                    <br><small class="text-muted">ecommerce-store.com</small>
+                                </td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>
+                                    <div class="scan-stats">
+                                        <span class="stat plugins"><i class="bi bi-puzzle"></i> 25</span>
+                                        <span class="stat themes"><i class="bi bi-palette"></i> 2</span>
+                                        <span class="stat vulns"><i class="bi bi-bug-fill"></i> 8</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-info">6.3.1</span></td>
+                                <td><span class="badge bg-warning text-dark">CF</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:15:22
+                                    <br><small class="text-muted">耗时 12.5s</small>
+                                </td>
+                                <td>
+                                    <a href="scan-detail.html" class="btn btn-sm btn-outline-primary" title="详情">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary" title="重新扫描">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td><input type="checkbox" class="form-check-input"></td>
+                                <td class="scan-target">
+                                    <a href="scan-detail.html">https://news-portal.net</a>
+                                    <br><small class="text-muted">news-portal.net</small>
+                                </td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>
+                                    <div class="scan-stats">
+                                        <span class="stat plugins"><i class="bi bi-puzzle"></i> 18</span>
+                                        <span class="stat themes"><i class="bi bi-palette"></i> 1</span>
+                                        <span class="stat vulns"><i class="bi bi-bug-fill"></i> 3</span>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-info">6.4.0</span></td>
+                                <td><span class="badge bg-secondary">-</span></td>
+                                <td class="scan-time">
+                                    2024-01-15 10:12:18
+                                    <br><small class="text-muted">耗时 9.8s</small>
+                                </td>
+                                <td>
+                                    <a href="scan-detail.html" class="btn btn-sm btn-outline-primary" title="详情">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary" title="重新扫描">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted">显示 1-50 / 共 500,000 条</span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary">批量扫描</button>
+                        <button class="btn btn-outline-danger">批量删除</button>
+                    </div>
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item"><a class="page-link" href="#">2</a></li>
+                        <li class="page-item"><a class="page-link" href="#">3</a></li>
+                        <li class="page-item"><a class="page-link" href="#">...</a></li>
+                        <li class="page-item"><a class="page-link" href="#">10000</a></li>
+                        <li class="page-item"><a class="page-link" href="#">下一页</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </main>
+
+    <!-- 新建扫描弹窗 -->
+    <div class="modal fade" id="newScanModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建扫描任务</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#singleScan">单个目标</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#batchScan">批量扫描</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#groupScan">按分组扫描</a>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <!-- 单个目标 -->
+                        <div class="tab-pane fade show active" id="singleScan">
+                            <div class="mb-3">
+                                <label class="form-label">目标 URL</label>
+                                <input type="url" class="form-control" placeholder="https://example.com">
+                                <div class="form-text">输入完整 URL，必须包含 http:// 或 https://</div>
+                            </div>
+                        </div>
+
+                        <!-- 批量扫描 -->
+                        <div class="tab-pane fade" id="batchScan">
+                            <div class="mb-3">
+                                <label class="form-label">选择已导入的资产</label>
+                                <select class="form-select" multiple style="height: 150px;">
+                                    <option value="pending">待扫描资产 (12,458 个)</option>
+                                    <option value="all_wp">所有 WordPress 站点 (320,000 个)</option>
+                                    <option value="has_vuln">有漏洞的站点 (25,678 个)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">扫描选项</label>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="skipScanned" checked>
+                                    <label class="form-check-label" for="skipScanned">跳过已扫描过的目标</label>
+                                </div>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="wpOnly">
+                                    <label class="form-check-label" for="wpOnly">仅扫描已确认的 WordPress 站点</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 按分组扫描 -->
+                        <div class="tab-pane fade" id="groupScan">
+                            <div class="mb-3">
+                                <label class="form-label">选择分组</label>
+                                <select class="form-select">
+                                    <option value="">请选择分组...</option>
+                                    <option value="1">电商网站 (50,000 个)</option>
+                                    <option value="2">企业官网 (120,000 个)</option>
+                                    <option value="3">博客站点 (80,000 个)</option>
+                                    <option value="4">新闻门户 (30,000 个)</option>
+                                    <option value="5">教育网站 (25,000 个)</option>
+                                </select>
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                选择分组后将扫描该分组下的所有资产
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary">
+                        <i class="bi bi-play-fill"></i> 开始扫描
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

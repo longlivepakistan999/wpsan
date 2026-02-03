@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 漏洞库</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .filter-bar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .vuln-card {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+            transition: all 0.3s;
+        }
+        .vuln-card:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .vuln-card.critical { border-left-color: #dc3545; }
+        .vuln-card.high { border-left-color: #fd7e14; }
+        .vuln-card.medium { border-left-color: #ffc107; }
+        .vuln-card.low { border-left-color: #0dcaf0; }
+        .badge-critical { background: #dc3545; }
+        .badge-high { background: #fd7e14; }
+        .badge-medium { background: #ffc107; color: #000; }
+        .badge-low { background: #0dcaf0; color: #000; }
+        .vuln-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e3a5f;
+        }
+        .vuln-meta {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 8px;
+        }
+        .vuln-meta span {
+            margin-right: 15px;
+        }
+        .vuln-desc {
+            color: #6c757d;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .stat-box {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .stat-box .value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .stat-box .label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="targets.html">
+                    <i class="bi bi-bullseye"></i> 资产管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="scans.html">
+                    <i class="bi bi-search"></i> 扫描任务
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h4 class="mb-0">漏洞库</h4>
+                <small class="text-muted">自维护漏洞信息库，共 256 条记录</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary">
+                    <i class="bi bi-upload"></i> 导入漏洞
+                </button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addVulnModal">
+                    <i class="bi bi-plus-lg"></i> 添加漏洞
+                </button>
+            </div>
+        </div>
+
+        <!-- 统计 -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="stat-box">
+                    <div class="value text-danger">23</div>
+                    <div class="label">严重漏洞</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-box">
+                    <div class="value text-warning">67</div>
+                    <div class="label">高危漏洞</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-box">
+                    <div class="value" style="color: #ffc107;">112</div>
+                    <div class="label">中危漏洞</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-box">
+                    <div class="value text-info">54</div>
+                    <div class="label">低危漏洞</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" placeholder="搜索漏洞名称、CVE...">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有类型</option>
+                        <option value="plugin">插件</option>
+                        <option value="theme">主题</option>
+                        <option value="core">核心</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">所有严重性</option>
+                        <option value="critical">严重</option>
+                        <option value="high">高危</option>
+                        <option value="medium">中危</option>
+                        <option value="low">低危</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">插件筛选</option>
+                        <option value="elementor">Elementor</option>
+                        <option value="woocommerce">WooCommerce</option>
+                        <option value="contact-form-7">Contact Form 7</option>
+                        <option value="jetpack">Jetpack</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select">
+                        <option value="">有无 POC</option>
+                        <option value="has">有 POC</option>
+                        <option value="no">无 POC</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <button class="btn btn-outline-primary w-100">筛选</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 漏洞列表 -->
+        <div class="vuln-card critical">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-critical">严重</span>
+                        <span class="badge bg-secondary">插件</span>
+                        <span class="badge bg-success"><i class="bi bi-lightning"></i> 有 POC</span>
+                    </div>
+                    <div class="vuln-title">Elementor Pro Remote Code Execution</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-puzzle"></i> elementor</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-1234</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 3.5.0</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 3.5.0</span>
+                    </div>
+                    <div class="vuln-desc">
+                        Elementor Pro 插件存在未授权远程代码执行漏洞，攻击者可通过模板导入功能执行任意代码，获取服务器控制权限。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vuln-card high">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-high">高危</span>
+                        <span class="badge bg-secondary">插件</span>
+                        <span class="badge bg-success"><i class="bi bi-lightning"></i> 有 POC</span>
+                    </div>
+                    <div class="vuln-title">WooCommerce SQL Injection</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-puzzle"></i> woocommerce</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-2345</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 8.5.0</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 8.5.0</span>
+                    </div>
+                    <div class="vuln-desc">
+                        WooCommerce 订单导出功能存在 SQL 注入漏洞，攻击者可通过构造恶意请求获取数据库敏感信息。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vuln-card high">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-high">高危</span>
+                        <span class="badge bg-secondary">插件</span>
+                        <span class="badge bg-success"><i class="bi bi-lightning"></i> 有 POC</span>
+                    </div>
+                    <div class="vuln-title">Contact Form 7 Arbitrary File Upload</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-puzzle"></i> contact-form-7</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-3456</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 5.8.0</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 5.8.0</span>
+                    </div>
+                    <div class="vuln-desc">
+                        Contact Form 7 存在任意文件上传漏洞，攻击者可绕过文件类型检查上传 WebShell。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vuln-card medium">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-medium">中危</span>
+                        <span class="badge bg-secondary">插件</span>
+                        <span class="badge bg-outline-secondary border"><i class="bi bi-lightning"></i> 无 POC</span>
+                    </div>
+                    <div class="vuln-title">Yoast SEO Stored XSS</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-puzzle"></i> wordpress-seo</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-4567</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 21.0</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 21.0</span>
+                    </div>
+                    <div class="vuln-desc">
+                        Yoast SEO 插件存在存储型 XSS 漏洞，攻击者可通过 SEO 标题字段注入恶意脚本。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vuln-card medium">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-medium">中危</span>
+                        <span class="badge bg-secondary">插件</span>
+                        <span class="badge bg-outline-secondary border"><i class="bi bi-lightning"></i> 无 POC</span>
+                    </div>
+                    <div class="vuln-title">Jetpack SSRF Vulnerability</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-puzzle"></i> jetpack</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-5678</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 12.5</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 12.5</span>
+                    </div>
+                    <div class="vuln-desc">
+                        Jetpack 插件存在 SSRF 漏洞，攻击者可利用该漏洞访问内网资源。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="vuln-card low">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge badge-low">低危</span>
+                        <span class="badge bg-secondary">核心</span>
+                        <span class="badge bg-outline-secondary border"><i class="bi bi-lightning"></i> 无 POC</span>
+                    </div>
+                    <div class="vuln-title">WordPress Core Information Disclosure</div>
+                    <div class="vuln-meta">
+                        <span><i class="bi bi-wordpress"></i> wordpress</span>
+                        <span><i class="bi bi-tag"></i> CVE-2024-6789</span>
+                        <span><i class="bi bi-code-slash"></i> 影响版本: &lt; 6.4.0</span>
+                        <span><i class="bi bi-patch-check"></i> 修复版本: 6.4.0</span>
+                    </div>
+                    <div class="vuln-desc">
+                        WordPress 核心存在信息泄露漏洞，攻击者可通过特定请求获取系统敏感信息。
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item"><a class="page-link" href="#">2</a></li>
+                <li class="page-item"><a class="page-link" href="#">3</a></li>
+                <li class="page-item"><a class="page-link" href="#">...</a></li>
+                <li class="page-item"><a class="page-link" href="#">26</a></li>
+                <li class="page-item"><a class="page-link" href="#">下一页</a></li>
+            </ul>
+        </nav>
+    </main>
+
+    <!-- 添加漏洞弹窗 -->
+    <div class="modal fade" id="addVulnModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-lg"></i> 添加漏洞</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">漏洞名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" placeholder="例如: Elementor Pro Remote Code Execution">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">CVE 编号</label>
+                            <input type="text" class="form-control" placeholder="CVE-2024-XXXX">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">组件类型 <span class="text-danger">*</span></label>
+                            <select class="form-select">
+                                <option value="plugin">插件</option>
+                                <option value="theme">主题</option>
+                                <option value="core">核心</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">组件 Slug <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" placeholder="例如: elementor">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">严重性 <span class="text-danger">*</span></label>
+                            <select class="form-select">
+                                <option value="critical">严重</option>
+                                <option value="high">高危</option>
+                                <option value="medium" selected>中危</option>
+                                <option value="low">低危</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">影响版本 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" placeholder="例如: < 3.5.0">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">修复版本</label>
+                            <input type="text" class="form-control" placeholder="例如: 3.5.0">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">漏洞描述</label>
+                            <textarea class="form-control" rows="3" placeholder="漏洞详细描述..."></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">关联 POC ID</label>
+                            <input type="text" class="form-control" placeholder="例如: elementor-rce-2024">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">参考链接</label>
+                            <input type="text" class="form-control" placeholder="https://...">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary"><i class="bi bi-check-lg"></i> 保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

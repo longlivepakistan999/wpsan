@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPSan - 导入进度</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+        }
+        body {
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%);
+            padding: 0;
+            z-index: 1000;
+        }
+        .sidebar .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 10px;
+        }
+        .sidebar .logo h4 {
+            color: #fff;
+            margin: 0;
+            font-weight: 700;
+        }
+        .sidebar .logo small {
+            color: rgba(255,255,255,0.5);
+            font-size: 12px;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.7);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border-left-color: #0d6efd;
+        }
+        .sidebar .nav-link i {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 20px 30px;
+            min-height: 100vh;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .progress-card {
+            padding: 30px;
+        }
+        .import-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .import-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+        }
+        .import-icon.processing {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            animation: pulse 2s infinite;
+        }
+        .import-icon.completed {
+            background: #d4edda;
+            color: #198754;
+        }
+        .import-icon.failed {
+            background: #f8d7da;
+            color: #dc3545;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .import-title h4 {
+            margin: 0;
+            color: #1e3a5f;
+        }
+        .import-title p {
+            margin: 5px 0 0;
+            color: #6c757d;
+        }
+        .progress-main {
+            height: 30px;
+            border-radius: 15px;
+            background: #e9ecef;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .progress-main .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .progress-stats span {
+            color: #6c757d;
+        }
+        .stat-boxes {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-box.total { border-left: 4px solid #6c757d; }
+        .stat-box.processed { border-left: 4px solid #0d6efd; }
+        .stat-box.valid { border-left: 4px solid #198754; }
+        .stat-box.duplicate { border-left: 4px solid #ffc107; }
+        .stat-box.invalid { border-left: 4px solid #dc3545; }
+        .stat-box-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+        .stat-box-label {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .file-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .file-info-row:last-child {
+            border-bottom: none;
+        }
+        .file-info-label {
+            color: #6c757d;
+        }
+        .file-info-value {
+            font-weight: 500;
+            color: #1e3a5f;
+        }
+        .log-container {
+            background: #1e1e1e;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+        .log-line {
+            color: #d4d4d4;
+            margin-bottom: 5px;
+        }
+        .log-line .time {
+            color: #6a9955;
+        }
+        .log-line .info { color: #569cd6; }
+        .log-line .success { color: #4ec9b0; }
+        .log-line .warning { color: #ce9178; }
+        .log-line .error { color: #f44747; }
+        .history-table th {
+            font-weight: 600;
+            color: #6c757d;
+            font-size: 13px;
+        }
+        .history-table td {
+            vertical-align: middle;
+        }
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-badge.processing {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .status-badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <nav class="sidebar">
+        <div class="logo">
+            <h4><i class="bi bi-shield-check"></i> WPSan</h4>
+            <small>WordPress Security Analyzer</small>
+        </div>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link" href="dashboard.html">
+                    <i class="bi bi-speedometer2"></i> 仪表盘
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="targets.html">
+                    <i class="bi bi-bullseye"></i> 资产管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="scans.html">
+                    <i class="bi bi-search"></i> 扫描任务
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="vulns.html">
+                    <i class="bi bi-bug"></i> 漏洞库
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="pocs.html">
+                    <i class="bi bi-lightning"></i> POC 管理
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="probes.html">
+                    <i class="bi bi-hdd-network"></i> 探针状态
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="logs.html">
+                    <i class="bi bi-journal-text"></i> 操作日志
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="targets.html">资产管理</a></li>
+                        <li class="breadcrumb-item active">导入进度</li>
+                    </ol>
+                </nav>
+                <h4 class="mb-0">资产导入</h4>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="targets.html" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> 返回资产列表
+                </a>
+            </div>
+        </div>
+
+        <!-- 当前导入任务 -->
+        <div class="card progress-card mb-4">
+            <div class="import-header">
+                <div class="import-icon processing">
+                    <i class="bi bi-file-earmark-arrow-up"></i>
+                </div>
+                <div class="import-title">
+                    <h4>正在导入 targets_20240115.csv</h4>
+                    <p>任务 ID: import_abc123 | 开始时间: 2024-01-15 10:25:08 | 导入到分组: 电商网站</p>
+                </div>
+            </div>
+
+            <!-- 进度条 -->
+            <div class="progress-main">
+                <div class="progress-bar" style="width: 67%">67%</div>
+            </div>
+            <div class="progress-stats">
+                <span><i class="bi bi-clock"></i> 已用时间: 2分35秒</span>
+                <span><i class="bi bi-speedometer2"></i> 处理速度: 3,200 条/秒</span>
+                <span><i class="bi bi-hourglass-split"></i> 预计剩余: 约 1分15秒</span>
+            </div>
+
+            <!-- 统计数据 -->
+            <div class="stat-boxes">
+                <div class="stat-box total">
+                    <div class="stat-box-value">500,000</div>
+                    <div class="stat-box-label">总行数</div>
+                </div>
+                <div class="stat-box processed">
+                    <div class="stat-box-value">335,000</div>
+                    <div class="stat-box-label">已处理</div>
+                </div>
+                <div class="stat-box valid">
+                    <div class="stat-box-value">332,850</div>
+                    <div class="stat-box-label">有效导入</div>
+                </div>
+                <div class="stat-box duplicate">
+                    <div class="stat-box-value">1,650</div>
+                    <div class="stat-box-label">重复跳过</div>
+                </div>
+                <div class="stat-box invalid">
+                    <div class="stat-box-value">500</div>
+                    <div class="stat-box-label">无效 URL</div>
+                </div>
+            </div>
+
+            <!-- 文件信息 -->
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="file-info">
+                        <h6 class="mb-3"><i class="bi bi-file-earmark-text"></i> 文件信息</h6>
+                        <div class="file-info-row">
+                            <span class="file-info-label">文件名</span>
+                            <span class="file-info-value">targets_20240115.csv</span>
+                        </div>
+                        <div class="file-info-row">
+                            <span class="file-info-label">文件大小</span>
+                            <span class="file-info-value">52.4 MB</span>
+                        </div>
+                        <div class="file-info-row">
+                            <span class="file-info-label">文件格式</span>
+                            <span class="file-info-value">CSV</span>
+                        </div>
+                        <div class="file-info-row">
+                            <span class="file-info-label">目标分组</span>
+                            <span class="file-info-value">电商网站</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <h6 class="mb-3"><i class="bi bi-terminal"></i> 实时日志</h6>
+                    <div class="log-container">
+                        <div class="log-line"><span class="time">[10:25:08]</span> <span class="info">[INFO]</span> 开始解析文件 targets_20240115.csv</div>
+                        <div class="log-line"><span class="time">[10:25:08]</span> <span class="info">[INFO]</span> 检测到 CSV 格式，包含列: url, name, tags</div>
+                        <div class="log-line"><span class="time">[10:25:09]</span> <span class="info">[INFO]</span> 预计总行数: 500,000</div>
+                        <div class="log-line"><span class="time">[10:25:09]</span> <span class="success">[SUCCESS]</span> 批次 #1 完成: 1,000 条写入</div>
+                        <div class="log-line"><span class="time">[10:25:10]</span> <span class="success">[SUCCESS]</span> 批次 #2 完成: 1,000 条写入</div>
+                        <div class="log-line"><span class="time">[10:25:11]</span> <span class="warning">[WARN]</span> 发现重复 URL: https://example.com (已存在)</div>
+                        <div class="log-line"><span class="time">[10:25:12]</span> <span class="error">[ERROR]</span> 无效 URL: not-a-valid-url (缺少协议)</div>
+                        <div class="log-line"><span class="time">[10:25:13]</span> <span class="success">[SUCCESS]</span> 批次 #3 完成: 998 条写入 (2 条重复)</div>
+                        <div class="log-line"><span class="time">[10:26:00]</span> <span class="success">[SUCCESS]</span> 批次 #100 完成: 1,000 条写入</div>
+                        <div class="log-line"><span class="time">[10:27:00]</span> <span class="success">[SUCCESS]</span> 批次 #200 完成: 1,000 条写入</div>
+                        <div class="log-line"><span class="time">[10:27:43]</span> <span class="info">[INFO]</span> 已处理 335,000 条 (67%)...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 text-center">
+                <button class="btn btn-outline-warning me-2">
+                    <i class="bi bi-pause-fill"></i> 暂停导入
+                </button>
+                <button class="btn btn-outline-danger">
+                    <i class="bi bi-x-circle"></i> 取消导入
+                </button>
+            </div>
+        </div>
+
+        <!-- 已完成的导入示例 -->
+        <div class="card progress-card mb-4" style="opacity: 0.8;">
+            <div class="import-header">
+                <div class="import-icon completed">
+                    <i class="bi bi-check-lg"></i>
+                </div>
+                <div class="import-title">
+                    <h4>导入完成: sites_batch2.txt</h4>
+                    <p>任务 ID: import_xyz789 | 完成时间: 2024-01-15 09:50:20 | 耗时: 45秒</p>
+                </div>
+            </div>
+
+            <div class="stat-boxes">
+                <div class="stat-box total">
+                    <div class="stat-box-value">10,000</div>
+                    <div class="stat-box-label">总行数</div>
+                </div>
+                <div class="stat-box processed">
+                    <div class="stat-box-value">10,000</div>
+                    <div class="stat-box-label">已处理</div>
+                </div>
+                <div class="stat-box valid">
+                    <div class="stat-box-value">9,930</div>
+                    <div class="stat-box-label">有效导入</div>
+                </div>
+                <div class="stat-box duplicate">
+                    <div class="stat-box-value">50</div>
+                    <div class="stat-box-label">重复跳过</div>
+                </div>
+                <div class="stat-box invalid">
+                    <div class="stat-box-value">20</div>
+                    <div class="stat-box-label">无效 URL</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 导入历史 -->
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">导入历史</h5>
+                <button class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover history-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>任务 ID</th>
+                                <th>文件名</th>
+                                <th>类型</th>
+                                <th>大小</th>
+                                <th>分组</th>
+                                <th>状态</th>
+                                <th>导入结果</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>import_abc123</code></td>
+                                <td>targets_20240115.csv</td>
+                                <td><span class="badge bg-secondary">CSV</span></td>
+                                <td>52.4 MB</td>
+                                <td>电商网站</td>
+                                <td><span class="status-badge processing">进行中</span></td>
+                                <td>332,850 / 500,000</td>
+                                <td>2024-01-15 10:25</td>
+                            </tr>
+                            <tr>
+                                <td><code>import_xyz789</code></td>
+                                <td>sites_batch2.txt</td>
+                                <td><span class="badge bg-info">TXT</span></td>
+                                <td>1.2 MB</td>
+                                <td>企业官网</td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>9,930 成功 / 50 重复 / 20 无效</td>
+                                <td>2024-01-15 09:50</td>
+                            </tr>
+                            <tr>
+                                <td><code>import_def456</code></td>
+                                <td>wordpress_sites.csv</td>
+                                <td><span class="badge bg-secondary">CSV</span></td>
+                                <td>85.6 MB</td>
+                                <td>博客站点</td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>78,500 成功 / 1,200 重复 / 300 无效</td>
+                                <td>2024-01-14 15:30</td>
+                            </tr>
+                            <tr>
+                                <td><code>import_ghi012</code></td>
+                                <td>broken_file.txt</td>
+                                <td><span class="badge bg-info">TXT</span></td>
+                                <td>5.8 MB</td>
+                                <td>-</td>
+                                <td><span class="status-badge failed">失败</span></td>
+                                <td><span class="text-danger">文件编码错误</span></td>
+                                <td>2024-01-14 14:20</td>
+                            </tr>
+                            <tr>
+                                <td><code>import_jkl345</code></td>
+                                <td>news_portals.csv</td>
+                                <td><span class="badge bg-secondary">CSV</span></td>
+                                <td>15.2 MB</td>
+                                <td>新闻门户</td>
+                                <td><span class="status-badge completed">已完成</span></td>
+                                <td>28,450 成功 / 300 重复 / 50 无效</td>
+                                <td>2024-01-14 10:15</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <span class="text-muted">显示最近 5 条记录</span>
+                <a href="#" class="btn btn-sm btn-outline-primary">查看全部历史</a>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 模拟实时更新进度
+        // 实际项目中会通过 WebSocket 接收更新
+        let progress = 67;
+        setInterval(() => {
+            if (progress < 100) {
+                progress += 0.1;
+                document.querySelector('.progress-bar').style.width = progress + '%';
+                document.querySelector('.progress-bar').textContent = Math.floor(progress) + '%';
+            }
+        }, 500);
+    </script>
+</body>
+</html>
