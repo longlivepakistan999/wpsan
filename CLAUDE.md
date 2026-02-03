@@ -1,5 +1,95 @@
 # CLAUDE.md - WPSan 项目指南
 
+## 当前实现状态 (2026-02)
+
+### 项目阶段：UI 原型完成，后端待开发
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| **静态 HTML 原型** | ✅ 完成 | 9 个页面的 UI 预览 |
+| **PHP 后端** | ⬜ 未开始 | 所有 src/ 目录代码待开发 |
+| **数据库** | ⬜ 未开始 | schema.sql 待创建 |
+| **队列系统** | ⬜ 未开始 | Redis 队列待实现 |
+| **探针程序** | ⬜ 未开始 | probe/ 目录待开发 |
+
+### 已完成的 HTML 页面 (`public/`)
+
+```
+public/
+├── dashboard.html       # 仪表盘 - 统计概览
+├── targets.html         # 资产管理 - 资产列表
+├── import-progress.html # 资产导入 - 导入进度
+├── scans.html           # 扫描列表
+├── scan-detail.html     # 扫描详情 - 插件/主题/漏洞
+├── vulns.html           # 漏洞库管理
+├── pocs.html            # POC 管理和执行
+├── probes.html          # 探针状态监控
+└── logs.html            # 操作日志
+```
+
+### 待创建的目录结构
+
+```
+src/                    # PHP 源码 (待创建)
+├── Core/               # 核心框架
+├── Scanner/            # 扫描模块
+├── Import/             # 导入模块
+├── Poc/                # POC 模块
+├── Queue/              # 队列模块
+├── Api/                # API 控制器
+├── Model/              # 数据模型
+└── Utils/              # 工具类
+```
+
+---
+
+## AI 助手开发指南
+
+### 开发原则
+
+1. **按阶段开发** - 遵循 Phase 1 → Phase 6 的顺序，先完成基础框架再开发功能模块
+2. **PHP 8.2+ 规范** - 使用类型声明、属性提升、枚举等现代 PHP 特性
+3. **无框架原生开发** - 不使用 Laravel/Symfony，使用原生 PHP + Composer 自动加载
+4. **PSR 标准** - 遵循 PSR-4 自动加载、PSR-12 代码风格
+5. **安全第一** - 所有扫描必须是非入侵性的，仅被动信息收集
+
+### 命名空间约定
+
+```php
+WPSan\Core\       # 核心类
+WPSan\Scanner\    # 扫描模块
+WPSan\Import\     # 导入模块
+WPSan\Poc\        # POC 模块
+WPSan\Queue\      # 队列模块
+WPSan\Api\        # API 控制器
+WPSan\Model\      # 数据模型
+WPSan\Utils\      # 工具类
+```
+
+### 下一步开发任务
+
+1. **创建目录结构** - 运行初始化命令创建 src/ 及子目录
+2. **初始化 Composer** - 创建 composer.json 配置 PSR-4 自动加载
+3. **实现 Core 模块** - App.php, Config.php, Database.php, Redis.php, Logger.php, Router.php
+4. **创建数据库 Schema** - sql/schema.sql
+5. **实现 Utils 模块** - HttpClient.php, IpUtils.php, Validator.php
+
+### 代码风格要求
+
+- 类文件：PascalCase (如 `ScannerService.php`)
+- 方法名：camelCase (如 `detectWordPress()`)
+- 常量：UPPER_SNAKE_CASE (如 `const MAX_CONCURRENCY = 100`)
+- 私有属性：camelCase with type hints (如 `private int $batchSize = 1000`)
+- 每个类一个文件，命名空间与目录结构对应
+
+### 测试说明
+
+- 测试目录：`tests/`
+- 使用 PHPUnit 进行单元测试
+- 测试类命名：`{ClassName}Test.php`
+
+---
+
 ## 项目概述
 
 WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全扫描工具，采用无入侵方式进行安全检测，支持**几十万级**资产批量扫描。
@@ -153,17 +243,20 @@ composer install
 
 ### 9. 前端视图 (Views)
 
-| 任务 | 文件 | 状态 | 说明 |
-|------|------|------|------|
-| 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部 |
-| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
-| 资产列表 | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
-| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 导入进度 |
-| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
-| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 漏洞列表 |
-| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
-| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 探针监控 |
-| 操作日志 | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
+> **注意**: 静态 HTML 原型已完成，位于 `public/*.html`。后续需转换为 PHP 模板。
+
+| 任务 | HTML 原型 | PHP 模板 | 状态 | 说明 |
+|------|-----------|----------|------|------|
+| 公共布局 | (内嵌各页面) | `views/layout.php` | ⬜ 待提取 | 侧边栏、头部 |
+| 仪表盘 | `public/dashboard.html` | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
+| 资产列表 | `public/targets.html` | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
+| 资产导入 | `public/import-progress.html` | `views/targets/import.php` | ✅ HTML完成 | 导入进度 |
+| 扫描列表 | `public/scans.html` | `views/scans/index.php` | ✅ HTML完成 | 扫描任务列表 |
+| 扫描详情 | `public/scan-detail.html` | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
+| 漏洞库 | `public/vulns.html` | `views/vulns/index.php` | ✅ HTML完成 | 漏洞列表 |
+| POC 管理 | `public/pocs.html` | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
+| 探针状态 | `public/probes.html` | `views/probes/index.php` | ✅ HTML完成 | 探针监控 |
+| 操作日志 | `public/logs.html` | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
 
 ### 10. 探针程序 (Probe)
 
@@ -3041,3 +3134,69 @@ class OperationLogger
 - [ ] 许可证系统
 - [ ] API 配额
 - [ ] 高级报告
+
+---
+
+## 快速参考
+
+### 关键文件位置
+
+| 用途 | 路径 |
+|------|------|
+| HTML 原型 | `public/*.html` |
+| PHP 源码 | `src/` (待创建) |
+| 视图模板 | `views/` (待创建) |
+| 配置文件 | `config/` (待创建) |
+| 数据库脚本 | `sql/schema.sql` (待创建) |
+| CLI 脚本 | `bin/` (待创建) |
+| POC 文件 | `pocs/` (待创建) |
+| 探针程序 | `probe/` (待创建) |
+| Cloudflare IP | `data/cloudflare/` (待创建) |
+
+### 技术栈速查
+
+```
+后端: PHP 8.2+ (原生，无框架)
+数据库: MySQL 8.0+ (PDO)
+缓存/队列: Redis (Predis)
+HTTP: Guzzle 7.x
+WebSocket: Workerman 4.x
+前端: Bootstrap 5 + 原生 JS
+```
+
+### 初始化命令 (首次开发)
+
+```bash
+# 1. 创建目录结构
+mkdir -p src/{Core,Scanner,Import,Poc,Queue/Jobs,Api,Model,Utils}
+mkdir -p {pocs/{wordpress,plugins,themes},probe,config,data/cloudflare}
+mkdir -p {storage/{imports,logs,cache},views/{targets,scans,vulns,pocs,probes,logs},bin,sql}
+
+# 2. 初始化 Composer
+composer init --name=wpsan/wpsan --type=project --require="php:>=8.2"
+composer require predis/predis guzzlehttp/guzzle workerman/workerman
+
+# 3. 配置 PSR-4 自动加载 (在 composer.json 中添加)
+# "autoload": { "psr-4": { "WPSan\\": "src/" } }
+
+# 4. 生成自动加载文件
+composer dump-autoload
+```
+
+### Git 提交规范
+
+```
+feat(module): 添加新功能
+fix(module): 修复 bug
+refactor(module): 代码重构
+docs: 文档更新
+chore: 依赖/配置更新
+test: 测试相关
+```
+
+### 安全注意事项
+
+1. **非入侵原则** - 所有扫描仅收集公开信息，不进行攻击性测试
+2. **POC 仅验证** - POC 只验证漏洞存在，不执行破坏性操作
+3. **无认证设计** - 系统假设私有部署，需通过防火墙/VPN 保护
+4. **敏感数据** - 扫描结果可能包含敏感信息，注意数据保护
