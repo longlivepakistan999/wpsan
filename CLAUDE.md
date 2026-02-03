@@ -15,6 +15,228 @@ WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全
 
 ---
 
+## 项目初始化
+
+### 创建项目目录结构
+
+```bash
+# 创建主目录
+mkdir -p wpsan/{public/assets/{css,js},src/{Core,Scanner,Import,Poc,Queue/Jobs,Api,Model,Utils},pocs/{wordpress,plugins,themes},probe,config,data/cloudflare,storage/{imports,logs,cache},views/{targets,scans,vulns,pocs,probes,logs},bin,sql}
+
+# 创建必要文件
+touch wpsan/public/{index.php,api.php}
+touch wpsan/src/Core/{App.php,Router.php,Database.php,Redis.php,Config.php,Logger.php}
+touch wpsan/src/Scanner/{ScannerService.php,WordPressDetector.php,CloudflareDetector.php,VersionDetector.php,AssetParser.php,PluginVersionDetector.php,ThemeVersionDetector.php}
+touch wpsan/src/Import/{ImportService.php,TxtParser.php,CsvParser.php}
+touch wpsan/src/Poc/{PocRunner.php,PocRegistry.php,BasePoc.php}
+touch wpsan/src/Queue/{QueueManager.php,Worker.php}
+touch wpsan/src/Api/{TargetApi.php,ScanApi.php,PocApi.php,VulnApi.php,ProbeApi.php,ExportApi.php}
+touch wpsan/src/Model/{Target.php,TargetGroup.php,ScanPlugin.php,ScanTheme.php,Vulnerability.php,PocExecution.php}
+touch wpsan/src/Utils/{HttpClient.php,IpUtils.php,Validator.php}
+touch wpsan/config/{app.php,database.php,scan.php}
+touch wpsan/bin/{worker.php,import.php,scan.php,update-cf-ips.php}
+touch wpsan/sql/schema.sql
+touch wpsan/{composer.json,.env.example}
+touch wpsan/probe/{probe.php,ProbeWorker.php,config.php}
+```
+
+### 初始化 Composer
+
+```json
+// composer.json
+{
+    "name": "wpsan/wpsan",
+    "description": "WordPress Security Analyzer",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "predis/predis": "^2.2",
+        "guzzlehttp/guzzle": "^7.8",
+        "workerman/workerman": "^4.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "WPSan\\": "src/"
+        }
+    }
+}
+```
+
+```bash
+composer install
+```
+
+---
+
+## 开发任务列表
+
+按模块组织的开发任务，用于跟踪项目进度。
+
+### 1. 核心框架 (Core)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 应用入口 | `src/Core/App.php` | ⬜ 待开发 | 应用初始化、配置加载 |
+| 路由器 | `src/Core/Router.php` | ⬜ 待开发 | API 路由分发 |
+| 数据库连接 | `src/Core/Database.php` | ⬜ 待开发 | PDO 封装、连接池 |
+| Redis 连接 | `src/Core/Redis.php` | ⬜ 待开发 | Predis 封装 |
+| 配置管理 | `src/Core/Config.php` | ⬜ 待开发 | 环境变量、配置文件读取 |
+| 日志系统 | `src/Core/Logger.php` | ⬜ 待开发 | 操作日志、错误日志 |
+
+### 2. 扫描模块 (Scanner)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 扫描主服务 | `src/Scanner/ScannerService.php` | ⬜ 待开发 | 扫描流程编排 |
+| WordPress 识别 | `src/Scanner/WordPressDetector.php` | ⬜ 待开发 | WP 特征检测 |
+| Cloudflare 检测 | `src/Scanner/CloudflareDetector.php` | ⬜ 待开发 | IP 段判断 |
+| 版本检测 | `src/Scanner/VersionDetector.php` | ⬜ 待开发 | WP 核心版本 |
+| 资产解析 | `src/Scanner/AssetParser.php` | ⬜ 待开发 | 从 JSON/HTML 提取插件主题 |
+| 插件版本检测 | `src/Scanner/PluginVersionDetector.php` | ⬜ 待开发 | readme.txt 等方式 |
+| 主题版本检测 | `src/Scanner/ThemeVersionDetector.php` | ⬜ 待开发 | style.css 等方式 |
+
+### 3. 导入模块 (Import)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 导入服务 | `src/Import/ImportService.php` | ⬜ 待开发 | 批量导入主逻辑 |
+| TXT 解析器 | `src/Import/TxtParser.php` | ⬜ 待开发 | 逐行解析 URL |
+| CSV 解析器 | `src/Import/CsvParser.php` | ⬜ 待开发 | CSV 列识别 |
+
+### 4. POC 模块 (Poc)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| POC 基类 | `src/Poc/BasePoc.php` | ⬜ 待开发 | 抽象类定义 |
+| POC 注册表 | `src/Poc/PocRegistry.php` | ⬜ 待开发 | 动态加载、版本匹配 |
+| POC 执行器 | `src/Poc/PocRunner.php` | ⬜ 待开发 | 批量执行、结果收集 |
+
+### 5. 队列模块 (Queue)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 队列管理器 | `src/Queue/QueueManager.php` | ⬜ 待开发 | Redis 队列操作 |
+| 队列消费者 | `src/Queue/Worker.php` | ⬜ 待开发 | 任务消费、并发控制 |
+| 扫描任务 | `src/Queue/Jobs/ScanJob.php` | ⬜ 待开发 | 扫描任务封装 |
+| POC 任务 | `src/Queue/Jobs/PocJob.php` | ⬜ 待开发 | POC 执行任务 |
+| 导入任务 | `src/Queue/Jobs/ImportJob.php` | ⬜ 待开发 | 文件导入任务 |
+
+### 6. API 模块 (Api)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 资产 API | `src/Api/TargetApi.php` | ⬜ 待开发 | CRUD、导入、分组 |
+| 扫描 API | `src/Api/ScanApi.php` | ⬜ 待开发 | 启动扫描、状态查询 |
+| POC API | `src/Api/PocApi.php` | ⬜ 待开发 | POC 列表、批量执行 |
+| 漏洞 API | `src/Api/VulnApi.php` | ⬜ 待开发 | 漏洞库管理 |
+| 探针 API | `src/Api/ProbeApi.php` | ⬜ 待开发 | 探针状态、任务分配 |
+| 导出 API | `src/Api/ExportApi.php` | ⬜ 待开发 | CSV/JSON 导出 |
+
+### 7. 数据模型 (Model)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 目标模型 | `src/Model/Target.php` | ⬜ 待开发 | 资产 CRUD |
+| 分组模型 | `src/Model/TargetGroup.php` | ⬜ 待开发 | 分组管理 |
+| 插件模型 | `src/Model/ScanPlugin.php` | ⬜ 待开发 | 扫描发现的插件 |
+| 主题模型 | `src/Model/ScanTheme.php` | ⬜ 待开发 | 扫描发现的主题 |
+| 漏洞模型 | `src/Model/Vulnerability.php` | ⬜ 待开发 | 漏洞库 |
+| POC 执行记录 | `src/Model/PocExecution.php` | ⬜ 待开发 | POC 结果 |
+
+### 8. 工具类 (Utils)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| HTTP 客户端 | `src/Utils/HttpClient.php` | ⬜ 待开发 | cURL/Guzzle 封装 |
+| IP 工具 | `src/Utils/IpUtils.php` | ⬜ 待开发 | CIDR 匹配 |
+| 验证器 | `src/Utils/Validator.php` | ⬜ 待开发 | URL 验证等 |
+
+### 9. 前端视图 (Views)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部 |
+| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
+| 资产列表 | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
+| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 导入进度 |
+| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
+| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 漏洞列表 |
+| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
+| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 探针监控 |
+| 操作日志 | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
+
+### 10. 探针程序 (Probe)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 探针入口 | `probe/probe.php` | ⬜ 待开发 | 启动脚本 |
+| 探针工作器 | `probe/ProbeWorker.php` | ⬜ 待开发 | 任务拉取、执行、上报 |
+| 探针配置 | `probe/config.php` | ⬜ 待开发 | 主服务器连接信息 |
+
+### 11. CLI 脚本 (Bin)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 队列 Worker | `bin/worker.php` | ⬜ 待开发 | 启动队列处理 |
+| 导入脚本 | `bin/import.php` | ⬜ 待开发 | 命令行导入 |
+| 扫描脚本 | `bin/scan.php` | ⬜ 待开发 | 命令行扫描 |
+| CF IP 更新 | `bin/update-cf-ips.php` | ⬜ 待开发 | 更新 Cloudflare IP |
+
+### 12. 数据库 (SQL)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| 数据库结构 | `sql/schema.sql` | ⬜ 待开发 | 建表语句 |
+
+### 13. WebSocket (实时通知)
+
+| 任务 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| WS 服务器 | `src/WebSocket/Server.php` | ⬜ 待开发 | Workerman 服务 |
+| 通知推送 | `src/WebSocket/Notifier.php` | ⬜ 待开发 | 频道广播 |
+
+---
+
+## 开发优先级
+
+建议按以下顺序开发：
+
+```
+Phase 1: 基础框架
+├── Core (App, Config, Database, Redis, Logger)
+├── Utils (HttpClient, IpUtils, Validator)
+└── SQL Schema
+
+Phase 2: 扫描核心
+├── Scanner (全部检测器)
+├── Model (Target, ScanPlugin, ScanTheme)
+└── Queue (QueueManager, Worker, ScanJob)
+
+Phase 3: 资产管理
+├── Import (ImportService, TxtParser, CsvParser)
+├── Api (TargetApi, ScanApi)
+└── Views (dashboard, targets)
+
+Phase 4: POC 系统
+├── Poc (BasePoc, PocRegistry, PocRunner)
+├── Model (Vulnerability, PocExecution)
+├── Api (PocApi, VulnApi)
+└── Views (pocs, vulns)
+
+Phase 5: 分布式
+├── Probe (ProbeWorker)
+├── Api (ProbeApi)
+└── Views (probes)
+
+Phase 6: 完善功能
+├── Export (ExportApi)
+├── WebSocket (实时通知)
+├── Logs (操作日志)
+└── 前端交互完善
+```
+
+---
+
 ## 扫描流程设计
 
 ```
