@@ -1,5 +1,87 @@
 # CLAUDE.md - WPSan 项目指南
 
+## 当前开发状态
+
+> **最后更新**: 2026-02-04
+> **项目阶段**: 规划与 UI 原型阶段
+
+### 已完成
+
+| 类别 | 状态 | 说明 |
+|------|------|------|
+| 项目规划文档 | ✅ 完成 | CLAUDE.md 完整规范 |
+| UI 原型 | ✅ 完成 | 9 个静态 HTML 页面 (Bootstrap 5) |
+
+### 待开发
+
+| 类别 | 状态 | 说明 |
+|------|------|------|
+| PHP 后端代码 | ⬜ 未开始 | src/ 目录下所有模块 |
+| 数据库结构 | ⬜ 未开始 | sql/schema.sql |
+| 配置文件 | ⬜ 未开始 | composer.json, .env |
+| 探针程序 | ⬜ 未开始 | probe/ 目录 |
+| CLI 工具 | ⬜ 未开始 | bin/ 目录 |
+
+### 当前文件结构
+
+```
+wpsan/
+├── CLAUDE.md                    # ✅ 项目规范文档 (本文件)
+└── public/                      # ✅ 静态 UI 原型
+    ├── dashboard.html           # 仪表盘
+    ├── targets.html             # 资产列表
+    ├── scan-detail.html         # 扫描详情
+    ├── scans.html               # 扫描任务列表
+    ├── pocs.html                # POC 管理
+    ├── vulns.html               # 漏洞库
+    ├── probes.html              # 探针状态
+    ├── logs.html                # 操作日志
+    └── import-progress.html     # 导入进度
+```
+
+> **注意**: 所有 HTML 文件为静态原型，使用 Bootstrap 5.3.2，尚未连接后端 API。
+
+### 开始开发
+
+要开始开发，按以下步骤执行：
+
+```bash
+# 1. 创建目录结构
+mkdir -p src/{Core,Scanner,Import,Poc,Queue/Jobs,Api,Model,Utils,WebSocket}
+mkdir -p pocs/{wordpress,plugins,themes}
+mkdir -p probe config data/cloudflare storage/{imports,logs,cache}
+mkdir -p views/{targets,scans,vulns,pocs,probes,logs}
+mkdir -p bin sql public/assets/{css,js}
+
+# 2. 创建 composer.json 并安装依赖
+cat > composer.json << 'EOF'
+{
+    "name": "wpsan/wpsan",
+    "description": "WordPress Security Analyzer",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "predis/predis": "^2.2",
+        "guzzlehttp/guzzle": "^7.8",
+        "workerman/workerman": "^4.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "WPSan\\": "src/"
+        }
+    }
+}
+EOF
+composer install
+
+# 3. 创建环境配置
+cp .env.example .env  # 需要先创建 .env.example
+
+# 4. 开始按 Phase 1 开发核心框架
+```
+
+---
+
 ## 项目概述
 
 WPSan (WordPress Security Analyzer) 是一个商业级分布式 WordPress 安全扫描工具，采用无入侵方式进行安全检测，支持**几十万级**资产批量扫描。
@@ -153,17 +235,45 @@ composer install
 
 ### 9. 前端视图 (Views)
 
+> **注意**: 静态 HTML 原型已完成，位于 `public/*.html`。PHP 视图模板需要基于这些原型开发。
+
+#### 9.1 静态 HTML 原型 (已完成)
+
+预览 HTML 原型：
+```bash
+# 使用 Python 简单服务器
+cd public && python3 -m http.server 8080
+# 或使用 PHP 内置服务器
+php -S localhost:8080 -t public
+# 访问 http://localhost:8080/dashboard.html
+```
+
+| 文件 | 状态 | 说明 |
+|------|------|------|
+| `public/dashboard.html` | ✅ 原型完成 | 仪表盘统计概览 |
+| `public/targets.html` | ✅ 原型完成 | 资产列表、筛选、导入 |
+| `public/scan-detail.html` | ✅ 原型完成 | 扫描结果详情 |
+| `public/scans.html` | ✅ 原型完成 | 扫描任务列表 |
+| `public/pocs.html` | ✅ 原型完成 | POC 列表和批量执行 |
+| `public/vulns.html` | ✅ 原型完成 | 漏洞库管理 |
+| `public/probes.html` | ✅ 原型完成 | 探针状态监控 |
+| `public/logs.html` | ✅ 原型完成 | 操作审计日志 |
+| `public/import-progress.html` | ✅ 原型完成 | 资产导入进度 |
+
+#### 9.2 PHP 视图模板 (待开发)
+
 | 任务 | 文件 | 状态 | 说明 |
 |------|------|------|------|
-| 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部 |
-| 仪表盘 | `views/dashboard.php` | ✅ HTML完成 | 统计概览 |
-| 资产列表 | `views/targets/index.php` | ✅ HTML完成 | 资产管理 |
-| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 导入进度 |
-| 扫描详情 | `views/scans/detail.php` | ✅ HTML完成 | 扫描结果 |
-| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 漏洞列表 |
-| POC 管理 | `views/pocs/index.php` | ✅ HTML完成 | POC 列表和执行 |
-| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 探针监控 |
-| 操作日志 | `views/logs/index.php` | ✅ HTML完成 | 审计日志 |
+| 公共布局 | `views/layout.php` | ⬜ 待开发 | 侧边栏、头部、公共组件 |
+| 仪表盘 | `views/dashboard.php` | ⬜ 待开发 | 基于 dashboard.html |
+| 资产列表 | `views/targets/index.php` | ⬜ 待开发 | 基于 targets.html |
+| 资产导入 | `views/targets/import.php` | ⬜ 待开发 | 基于 import-progress.html |
+| 扫描列表 | `views/scans/index.php` | ⬜ 待开发 | 基于 scans.html |
+| 扫描详情 | `views/scans/detail.php` | ⬜ 待开发 | 基于 scan-detail.html |
+| 漏洞库 | `views/vulns/index.php` | ⬜ 待开发 | 基于 vulns.html |
+| POC 管理 | `views/pocs/index.php` | ⬜ 待开发 | 基于 pocs.html |
+| 探针状态 | `views/probes/index.php` | ⬜ 待开发 | 基于 probes.html |
+| 操作日志 | `views/logs/index.php` | ⬜ 待开发 | 基于 logs.html |
 
 ### 10. 探针程序 (Probe)
 
